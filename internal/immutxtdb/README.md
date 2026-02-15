@@ -1,5 +1,17 @@
 # Journal DB
 
+## TODO
+- [x] BlocsFile first impl
+- [_] Bucket & Layer indexs first impl
+- [_] Document & Text indexs first impl
+- [_] A first text diff/layering impl (use a version / impl qualifier ?)
+- [_] Manage preloading of idx files ?
+- [_] Do we need to optimize "file reading stop" at snapshot layer ? Could provide a func to decide "preloading stop".
+- [_] Encryption of BlocsFiles impl
+- [_] Rotating Hash impl
+- [_] Randomly generated SecretKey ciphered with user passphrase
+
+
 ## Purpose
 DB to store text documents
 
@@ -20,6 +32,9 @@ DB to store text documents
 - compact : gather multiple buckets in minimum of files
 - offset? : 
 - index : 
+- paging : index results MUST be returned aggregated by pages of finite size (never return all results simultaneously)
+- cursor : ?
+- search : 
 
 ## Requirements
 - Too much files > bad for perf and for git db
@@ -32,6 +47,8 @@ DB to store text documents
   - compacting buckets append temp files into a minimum of already compacted files.
 - store multiple buckets in one file.
 - "compacting offset" to ensure compacting is done into dedicated filesDb appended files are exclusive to this device.
+- Paging
+- Search
 
 ## Services needed
 - save content into a "bucket" by "path"
@@ -103,22 +120,77 @@ DB to store text documents
 ### Version
 - Numerical increment ?
 
+### Index
+- Index --- Paginer --- Page --- BlocsFile
+- One Index reference multiple BlocsFiles
+- One Index return a Paginer
+- One Paginer iterate over all the BlocsFile
+
+## Indexing
+
+### Use Cases
+- List dumps by time (asc or desc)
+- Search dumps in time window
+- List topics
+- Search topics (wildcard ?)
+- List dumps by topics
+- List new topics
+- List documents by topics
+- Search documents
+
+#### Use case 1 : list last dumps (each dump is in a separate bucket)
+- read bucket-time index FROM end => get buckets uids
+- read bucket index ALL ? => get bucket locations 
+- read layer index => get bucket layers (file+blocId)
+- build documents
+
+#### Use case 2 : search topics
+- read topic index ALL => get all topics (need to load all topics to order and search)
+- serach algorithm on cached topics
+
+#### Use case 3 : list topic dumps (each dump is in a separate bucket)
+- read bucket-topic index FROM end => get buckets uids of kind dump
+- read layer index => get bucket layers (file+blocId)
+- build documents
+
+#### Use case 4 : list topic dump references (each dump reference is in one on more dumps)
+- read bucket-topic-ref index FROM end => get buckets uids of kind dump + inDoc ref
+- read layer index => get bucket layers (file+blocId)
+- build documents
+
+#### Use case 5 : list topic documents (each document is in a separate bucket)
+- read bucket-topic index FROM end => get buckets uids of kind document
+- read layer index => get bucket layers (file+blocId)
+- build documents
+
+#### Use case 6 : get document in a bucket
+- read layer index => get bucket layers (file+blocId)
+- build documents
+
+### Index needed properties
+- Readable by start or by end, fully or by page
+- Associate each index entry with a seq for fast count, and cache optimizations
+- Key, Value store
+- Associte entries with a State for Filtering purpose (stop index read, differentiate object kinds)
+
 ### Indexes
 #### Bucket index
-- Format: (BUCKET_UID)
+- Format: (BUCKET_UID, STATE_PRIVATE_DATA)
 - Encrypt all the files
+- STATE_PRIVATE_DATA 
 
 #### Layer index
-- Format: (RH(BUCKET_UID), RH(LAYER_FILE), POS, LEN)
+- Format: (RH(BUCKET_UID), RH(LAYER_FILE), BLOC_ID, STATE_PUBLIC_DATA)
 - Use "Rotating Hash" to cipher bucket and layer to mitigate "usage data inference".
 - Store layer state (Snapshoted or not) to reduce read count if possible.
+- Store item states in index ?
 
 #### Document index
-- Format: (RH(TOPIC), RH(BUCKET_UID))
+- Format: (RH(TOPIC), RH(BUCKET_UID), STATE_PUBLIC_DATA)
 - Use "Rotating Hash" to cipher bucket and layer to mitigate "usage data inference".
 
 #### Text index
-- Format: (RH(TOPIC), RH(BUCKET_UID), POS, LEN)
+- Format: (RH(TOPIC), RH(BUCKET_UID), POS, LEN, STATE_PUBLIC_DATA)
 - Use "Rotating Hash" to cipher bucket and layer to mitigate "usage data inference".
 
 #### Ideas
@@ -136,6 +208,7 @@ DB to store text documents
 - If a buckets doublon exists it MUST not be a problem
 - If two concurrent layers exists, attempt to auto merge it
 - If cannot auto merge 2 concurrent layers report conflict to user to merge in a new layer.
+
 
 ### Files
 #### Bloc readable from bottom
