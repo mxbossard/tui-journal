@@ -22,8 +22,6 @@ const (
 
 type index[K comparable, V any] interface {
 	Add(key K, val V) error
-	// getFirst(key K) (V, error)
-	// getLast(key K) (V, error)
 	Paginate(key K, order IdxOrder, pageSize int) (*paginer[K, V], chan error)
 	PaginateAll(order IdxOrder, pageSize int) (*paginer[K, V], chan error)
 	All(order IdxOrder, errChan chan error) iter.Seq2[K, V]
@@ -128,27 +126,31 @@ func (i *bucketIndex) Count() (int, error) {
 	return count, nil
 }
 
-func (i *bucketIndex) Paginate(key string, order IdxOrder, limit int) (*paginer[string, Bucket], chan error) {
+func (i *bucketIndex) Paginate(key string, order IdxOrder, limit int) (*paginer[string, bool], chan error) {
 	panic("not implemented yet")
 }
 
-func (i *bucketIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, Bucket], chan error) {
+func (i *bucketIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, bool], chan error) {
 	// TODO: cache all the bloc file content ?
 	// TODO: call all the index content ?
 	errChan := make(chan error)
 	idxFiles := append(i.deviceIdxFiles, i.otherIdxFiles...)
-	p := newPaginer(defaultPageSize, 0, errChan, func(offset int) ([]idxEntry[string, Bucket], error) {
-		panic("not implemented yet")
-	})
-	return p, errChan
-	for _, bf := range idxFiles {
-		for b := range bf.All(filez.TopToBottom, errChan) {
-			sit := inoutz.NewSplitIterator(b, newLineChar, blocBufferSize)
-			for line := range sit.All(errChan) {
-				_ = line
+	p := newPaginer[string, bool](defaultPageSize, 0, errChan, func(push func(k string, v bool) bool) {
+		//panic("not implemented yet")
+		for _, bf := range idxFiles {
+			for b := range bf.All(filez.TopToBottom, errChan) {
+				sit := inoutz.NewSplitIterator(b, newLineChar, blocBufferSize)
+				for line := range sit.All(errChan) {
+					_ = line
+					if !push(line, true) {
+						return
+					}
+				}
 			}
 		}
-	}
+	})
+	return p, errChan
+
 	panic("not implemented yet")
 }
 

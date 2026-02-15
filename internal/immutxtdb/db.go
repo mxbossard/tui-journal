@@ -1,5 +1,7 @@
 package immutxtdb
 
+import "github.com/mxbossard/utilz/errorz"
+
 type Query struct {
 }
 
@@ -12,23 +14,21 @@ type DB struct {
 
 func (d *DB) Bucket(uid string) (*Bucket, error) {
 	p, errChan := d.layerIdx.Paginate(uid, BottomToTop, 100)
-	if err != nil {
-		return nil, err
+
+	var layers []*layer
+	for page, ok := p.Next(); ok; {
+		_ = page
+		for _, entry := range page.Entries() {
+			layers = append(layers, entry.Val())
+		}
 	}
 	b := &Bucket{
-		db:  d,
-		uid: uid,
+		db:     d,
+		uid:    uid,
+		layers: layers,
 	}
-	if !ok {
-		return b, nil
-	} else {
-		layers, err := d.layerIdx.list(uid, BottomToTop, -1)
-		if err != nil {
-			return nil, err
-		}
-		b.layers = layers
-	}
-	panic("not implemented yet")
+
+	return b, errorz.ConsumedAggregated(errChan)
 }
 
 func (d DB) Query(query Query) ([]Bucket, error) {
