@@ -63,6 +63,7 @@ type idxEntry[K comparable, V any] interface {
 type basicIdxEntry[K comparable, V any] struct {
 	key K
 	val V
+	err error
 }
 
 func (e basicIdxEntry[K, V]) Key() K {
@@ -71,6 +72,10 @@ func (e basicIdxEntry[K, V]) Key() K {
 
 func (e basicIdxEntry[K, V]) Val() V {
 	return e.val
+}
+
+func (e basicIdxEntry[K, V]) Error() error {
+	return e.err
 }
 
 type bucketIdxEntry basicIdxEntry[string, bool]

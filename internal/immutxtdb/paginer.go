@@ -1,59 +1,88 @@
 package immutxtdb
 
-import "iter"
+import (
+	"iter"
+)
 
 type page[K comparable, V any] struct {
 	size    int
 	number  int
 	entries []*basicIdxEntry[K, V]
+	err     error
 }
 
+// The page size (max item count in the page)
 func (p page[K, V]) Size() int {
 	return p.size
 }
 
+// Number of item in the page
 func (p page[K, V]) Len() int {
 	return len(p.entries)
 }
 
-func (p page[K, V]) Offset() int {
+// First page is the 0 page.
+func (p page[K, V]) Number() int {
 	return p.number
 }
 
+// Return all entries
 func (p page[K, V]) Entries() []*basicIdxEntry[K, V] {
 	return p.entries
+}
+
+// Return errors
+func (p page[K, V]) Err() error {
+	return p.err
+}
+
+// Entries iterator
+func (p *page[K, V]) All() iter.Seq2[int, *basicIdxEntry[K, V]] {
+	return func(yield func(int, *basicIdxEntry[K, V]) bool) {
+		for pos, e := range p.entries {
+			if !yield(pos, e) {
+				return
+			}
+		}
+	}
 }
 
 type paginer[K comparable, V any] struct {
 	errChan      chan error
 	pageSize     int
 	preloadCount int
-	laoded       []*page[K, V]
+	loaded       []*page[K, V]
 	current      int
 	pushed       chan *basicIdxEntry[K, V]
 	closed       bool
+	endReached   bool
 }
 
 func (p *paginer[K, V]) buildPage(number int) *page[K, V] {
-	k := 0
+	if p.endReached {
+		return nil
+	}
 	var entries []*basicIdxEntry[K, V]
+	// fmt.Printf("building page #%d ...\n", number)
+	var err error
 	for item := range p.pushed {
-		if k >= p.pageSize {
+		if item.Error() != nil {
+			err = item.Error()
 			break
 		}
 		entries = append(entries, item)
-		k++
+		if len(entries) >= p.pageSize {
+			break
+		}
 	}
-
-	if len(entries) == 0 {
-		return nil
-	}
-
 	page := &page[K, V]{
 		size:    p.pageSize,
 		number:  number,
 		entries: entries,
+		err:     err,
 	}
+	p.endReached = len(entries) < p.pageSize
+	// fmt.Printf("built page #%d (count: %d)\n", number, len(entries))
 	return page
 }
 
@@ -61,51 +90,77 @@ func (p *paginer[K, V]) Close() {
 	p.closed = true
 	close(p.pushed)
 	close(p.errChan)
+	// fmt.Printf("paginer closed\n")
 }
 
-func (p *paginer[K, V]) Prev() (*page[K, V], bool) {
+func (p *paginer[K, V]) Prev() (*page[K, V], bool, error) {
 	if p.current <= 0 {
-		return nil, false
+		panic("previous page does not exists")
+		// return nil, false
 	}
 	p.current--
-	return p.laoded[p.current], p.current > 0
+	current := p.loaded[p.current]
+	return current, p.current > 0, current.Err()
 }
 
-func (p *paginer[K, V]) Next() (*page[K, V], bool) {
+func (p *paginer[K, V]) Next() (*page[K, V], bool, error) {
+	if p.current >= len(p.loaded) {
+		panic("next page does not exists")
+		// return nil, false
+	}
+	p.current++
+
 	// Load next page in advance
 	next := p.buildPage(p.current + 1)
 	if next != nil {
-		p.laoded = append(p.laoded, next)
+		p.loaded = append(p.loaded, next)
 	}
-	if p.current < len(p.laoded)-1 {
-		p.current++
-	}
-	return p.laoded[p.current], p.current < len(p.laoded)-1
+
+	remaining := p.current < (len(p.loaded) - 1)
+	current := p.loaded[p.current]
+	// fmt.Printf("Next() current: %d ; loaded size: %d ; remaining: %v\n", p.current, len(p.loaded), remaining)
+	// fmt.Printf("Returning page #%d ...\n", current.Number())
+	return current, remaining, current.Err()
+
 }
 
-func (p *paginer[K, V]) All() iter.Seq[*page[K, V]] {
-	panic("not implemented yet")
+func (p *paginer[K, V]) All() iter.Seq2[error, *page[K, V]] {
+	return func(yield func(error, *page[K, V]) bool) {
+		for {
+			page, ok, err := p.Next()
+			if !yield(err, page) {
+				return
+			}
+			if !ok {
+				return
+			}
+		}
+	}
 }
 
-func newPaginer[K comparable, V any](pageSize, preloadCount int, errChan chan error, pusher func(func(K, V) bool)) *paginer[K, V] {
+func newPaginer[K comparable, V any](pageSize, preloadPageCount int, pusher func(func(K, V, error) bool)) *paginer[K, V] {
 
 	p := &paginer[K, V]{
-		errChan:      errChan,
+		//errChan:      errChan,
 		pageSize:     pageSize,
-		preloadCount: preloadCount,
-		laoded:       make([]*page[K, V], 0),
-		pushed:       make(chan *basicIdxEntry[K, V], pageSize*preloadCount),
+		preloadCount: preloadPageCount,
+		loaded:       make([]*page[K, V], 0),
+		pushed:       make(chan *basicIdxEntry[K, V], pageSize*preloadPageCount),
 		current:      -1,
 	}
 	go func() {
-		pusher(func(k K, v V) bool {
-			e := basicIdxEntry[K, V]{key: k, val: v}
+		pusher(func(k K, v V, err error) bool {
+			e := basicIdxEntry[K, V]{key: k, val: v, err: err}
 			p.pushed <- &e
-			return p.closed
+			return !p.closed && err == nil
 		})
 		// When all items were pushed close the channel
 		close(p.pushed)
 	}()
+
+	// Build first page
+	first := p.buildPage(0)
+	p.loaded = append(p.loaded, first)
 
 	return p
 }

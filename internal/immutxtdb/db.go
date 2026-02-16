@@ -16,7 +16,10 @@ func (d *DB) Bucket(uid string) (*Bucket, error) {
 	p, errChan := d.layerIdx.Paginate(uid, BottomToTop, 100)
 
 	var layers []*layer
-	for page, ok := p.Next(); ok; {
+	for page, ok, err := p.Next(); ok; {
+		if err != nil {
+			return nil, err
+		}
 		_ = page
 		for _, entry := range page.Entries() {
 			layers = append(layers, entry.Val())

@@ -28,10 +28,17 @@ type index[K comparable, V any] interface {
 	Count() (int, error)
 }
 
+type bucketState int32
+
+const (
+	document bucketState = 0x1
+	dump     bucketState = 0x2
+)
+
 type bucketIndex struct {
 	*sync.Mutex
 	// FIXME: add a filelock
-	index[string, bool]
+	index[string, bucketState]
 
 	filepathes     []string
 	deviceIdxFiles []*filez.BlocsFile
@@ -43,7 +50,7 @@ func newBucketIndex(bucketDir, device string) (*bucketIndex, error) {
 	// Init bucketIndex
 	// FIXME: manage multiple idx files (rotation)
 	// FIXME: add a filelock
-	firstDeviceFilepath := filepath.Join(bucketDir, fmt.Sprintf("bucket-%s-001.idx"))
+	firstDeviceFilepath := filepath.Join(bucketDir, fmt.Sprintf("bucket-%s-001.idx", device))
 	dbf1, err := filez.NewBlocsFile(firstDeviceFilepath, 256, 100)
 	if err != nil {
 		return nil, err
@@ -77,7 +84,7 @@ func (i *bucketIndex) preload() error {
 			return err
 		}
 
-		_, seq, _, err := decodeLastIndexLine[any](buf.Bytes()[0:n])
+		_, seq, _, err := decodeLastIndexLine[bool](buf.Bytes()[0:n])
 		if err != nil {
 			return err
 		}
@@ -91,7 +98,7 @@ func (i *bucketIndex) selectDeviceBlocFile(uid string) *filez.BlocsFile {
 	return i.deviceIdxFiles[0]
 }
 
-func (i *bucketIndex) Add(uid string, ok bool) error {
+func (i *bucketIndex) Add(uid string, state bucketState) error {
 	i.Lock()
 	defer i.Unlock()
 	// TODO: write to block file
@@ -103,7 +110,7 @@ func (i *bucketIndex) Add(uid string, ok bool) error {
 	seq := i.seqs[bfName]
 
 	// FIXME: use good byte encoding !
-	entry, err := encodeIndexLine(seq, uid)
+	entry, err := encodeIndexLine(seq, []byte(uid), state)
 	if err != nil {
 		return err
 	}
@@ -126,23 +133,30 @@ func (i *bucketIndex) Count() (int, error) {
 	return count, nil
 }
 
-func (i *bucketIndex) Paginate(key string, order IdxOrder, limit int) (*paginer[string, bool], chan error) {
+func (i *bucketIndex) Paginate(key string, order IdxOrder, limit int) (*paginer[string, bucketState], chan error) {
 	panic("not implemented yet")
 }
 
-func (i *bucketIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, bool], chan error) {
+func (i *bucketIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, bucketState], chan error) {
 	// TODO: cache all the bloc file content ?
 	// TODO: call all the index content ?
 	errChan := make(chan error)
 	idxFiles := append(i.deviceIdxFiles, i.otherIdxFiles...)
-	p := newPaginer[string, bool](defaultPageSize, 0, errChan, func(push func(k string, v bool) bool) {
+	p := newPaginer(defaultPageSize, 0, func(push func(k string, v bucketState, err error) bool) {
 		//panic("not implemented yet")
 		for _, bf := range idxFiles {
 			for b := range bf.All(filez.TopToBottom, errChan) {
 				sit := inoutz.NewSplitIterator(b, newLineChar, blocBufferSize)
-				for line := range sit.All(errChan) {
-					_ = line
-					if !push(line, true) {
+				for seq, line := range sit.All(errChan) {
+					_ = seq
+					_, seq, uidBytes, err := decodeFirstIndexLine[[]byte](line)
+					_ = seq
+					// FIXME: push bucket state
+					uid := ""
+					if uidBytes != nil {
+						uid = string(*uidBytes)
+					}
+					if !push(uid, 0, err) {
 						return
 					}
 				}
@@ -150,7 +164,6 @@ func (i *bucketIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, b
 		}
 	})
 	return p, errChan
-
 	panic("not implemented yet")
 }
 
