@@ -9,43 +9,52 @@ type encodable interface {
 	bool | []byte
 }
 
+type encoder interface {
+	Match([]byte) bool
+	Header() []byte
+	Encode(int, [][]byte) ([]byte, error)
+	Decode([]byte) (int, [][]byte, error)
+	DecodeAll([]byte, func(int, [][]byte, error))
+}
+
 func encodeIndexLine[T encodable](seq int, data T, state bucketState) ([]byte, error) {
 	buf := make([]byte, indexLineBufferSize)
 	k := 0
-	n, err := binary.Encode(buf, binary.BigEndian, int32(seq))
+	n, err := binary.Encode(buf[k:], binary.BigEndian, int32(seq))
 	if err != nil {
 		return nil, fmt.Errorf("encoding seq: %w", err)
 	}
 	k += n
-	n, err = binary.Encode(buf, binary.BigEndian, delimiterChar)
+	n, err = binary.Encode(buf[k:], binary.BigEndian, byte(delimiterChar))
 	if err != nil {
 		return nil, fmt.Errorf("encoding delimiterChar: %w", err)
 	}
 	k += n
-	n, err = binary.Encode(buf, binary.BigEndian, data)
+	n, err = binary.Encode(buf[k:], binary.BigEndian, data)
 	if err != nil {
 		return nil, fmt.Errorf("encoding data: %w", err)
 	}
 	k += n
-	// n, err = binary.Encode(buf, binary.BigEndian, state)
+	// n, err = binary.Encode(buf[k:], binary.BigEndian, state)
 	// if err != nil {
 	// 	return nil, fmt.Errorf("encoding state: %w", err)
 	// }
 	// k += n
-	n, err = binary.Encode(buf, binary.BigEndian, newLineChar)
+	n, err = binary.Encode(buf[k:], binary.BigEndian, byte(newLineChar))
 	if err != nil {
 		return nil, fmt.Errorf("encoding newLineChar: %w", err)
 	}
+	k += n
 	return buf[:k], nil
 }
 
 // Return bytes read, seq, data
-func decodeFirstIndexLine[T encodable](data []byte) (int, int, *T, error) {
+func decodeFirstIndexLine[T encodable](data []byte) (int, int, *[]byte, error) {
 	// data should only contains one new line char at the end
 	l := len(data)
 	nextNewLinePos := l - 1
 	nextDelimiterPos := -1
-	for k := 1; k < l-2; k-- {
+	for k := 1; k < l-2; k++ {
 		if data[k] == delimiterChar {
 			nextDelimiterPos = k
 			continue
@@ -55,6 +64,7 @@ func decodeFirstIndexLine[T encodable](data []byte) (int, int, *T, error) {
 			break
 		}
 	}
+	fmt.Printf("found delim at: %d nl at: %d\n", nextDelimiterPos, nextNewLinePos)
 
 	if nextDelimiterPos < 0 {
 		return 0, 0, nil, fmt.Errorf("nothing to decode")
@@ -66,13 +76,13 @@ func decodeFirstIndexLine[T encodable](data []byte) (int, int, *T, error) {
 	if err != nil {
 		return 0, -1, nil, err
 	}
-	k += n
-	var decoded T
-	n, err = binary.Decode(data[nextDelimiterPos:nextNewLinePos], binary.BigEndian, &decoded)
+	k += n + 1
+	decoded := make([]byte, nextNewLinePos-nextDelimiterPos-1)
+	n, err = binary.Decode(data[nextDelimiterPos+1:nextNewLinePos], binary.BigEndian, &decoded)
 	if err != nil {
 		return 0, -1, nil, err
 	}
-	k += n
+	k += n + 1
 
 	return k, int(seq), &decoded, nil
 }

@@ -125,6 +125,16 @@ DB to store text documents
 - One Index reference multiple BlocsFiles
 - One Index return a Paginer
 - One Paginer iterate over all the BlocsFile
+- Index serialization format must be the same in all the file. The serialization version MUST be written on file head.
+- HEAD: [VERSION,LINE_SIZE,FORMAT?...]
+- LINE: [SEQ,STATE,DATA]
+- uid SHOULD contains only lowercase alphanum plus some special chars ex:[-a-z0-9_/:<>=+#*.] 
+- example of doc uid: project_electronic_analogic_ampli-op_foobarbaz : 46 chars
+- how to compress efficiently text in a byte stream ? For base64 1 byte can encode 4 chars => 128 chars could be encoded in 32 bytes
+- Could store UTF-8 chars for universality and simplicity => x12 bytes
+- 10.000 items of 40 bytes in idx : 400 kB
+- 10.000 items of 300 bytes in idx : 3 MB
+- First simple implem: use ASCII lower case only each char encoded on 1 byte.
 
 ## Indexing
 

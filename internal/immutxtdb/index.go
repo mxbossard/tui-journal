@@ -114,6 +114,7 @@ func (i *bucketIndex) Add(uid string, state bucketState) error {
 	if err != nil {
 		return err
 	}
+	fmt.Printf("writing encoded content (#%d, uid: %s): %v\n", seq, uid, entry)
 	_, err = bf.Write(entry)
 	if err != nil {
 		return err
@@ -146,8 +147,15 @@ func (i *bucketIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, b
 		//panic("not implemented yet")
 		for _, bf := range idxFiles {
 			for b := range bf.All(filez.TopToBottom, errChan) {
+				buf := make([]byte, 1000)
+				n, err := b.Read(buf)
+				if err != nil && err != io.EOF {
+					panic(err)
+				}
+				fmt.Printf("encoded Bloc content: [%v]\n", buf[0:n])
 				sit := inoutz.NewSplitIterator(b, newLineChar, blocBufferSize)
 				for seq, line := range sit.All(errChan) {
+					fmt.Printf("encoded Bloc line: [%v]\n", line)
 					_ = seq
 					_, seq, uidBytes, err := decodeFirstIndexLine[[]byte](line)
 					_ = seq
@@ -155,6 +163,9 @@ func (i *bucketIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, b
 					uid := ""
 					if uidBytes != nil {
 						uid = string(*uidBytes)
+						fmt.Printf("decoding Bloc line: [%d,%s]\n", seq, uid)
+					} else {
+						fmt.Printf("decoding Bloc line: [%d]\n", seq)
 					}
 					if !push(uid, 0, err) {
 						return
