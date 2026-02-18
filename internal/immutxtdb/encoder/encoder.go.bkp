@@ -9,15 +9,7 @@ type encodable interface {
 	bool | []byte
 }
 
-type encoder interface {
-	Match([]byte) bool
-	Header() []byte
-	Encode(int, [][]byte) ([]byte, error)
-	Decode([]byte) (int, [][]byte, error)
-	DecodeAll([]byte, func(int, [][]byte, error))
-}
-
-func encodeIndexLine[T encodable](seq int, data T, state bucketState) ([]byte, error) {
+func encodeIndexLine0[T encodable](seq int, data T, state bucketState) ([]byte, error) {
 	buf := make([]byte, indexLineBufferSize)
 	k := 0
 	n, err := binary.Encode(buf[k:], binary.BigEndian, int32(seq))
@@ -49,7 +41,7 @@ func encodeIndexLine[T encodable](seq int, data T, state bucketState) ([]byte, e
 }
 
 // Return bytes read, seq, data
-func decodeFirstIndexLine[T encodable](data []byte) (int, int, *[]byte, error) {
+func decodeFirstIndexLine0[T encodable](data []byte) (int, int, *[]byte, error) {
 	// data should only contains one new line char at the end
 	l := len(data)
 	nextNewLinePos := l - 1
@@ -88,7 +80,7 @@ func decodeFirstIndexLine[T encodable](data []byte) (int, int, *[]byte, error) {
 }
 
 // Return bytes read, seq, data
-func decodeLastIndexLine[T encodable](data []byte) (int, int, *T, error) {
+func decodeLastIndexLine0[T encodable](data []byte) (int, int, *T, error) {
 	// data should only contains one new line char at the end
 	l := len(data)
 	beforeLastNewLinePos := 0

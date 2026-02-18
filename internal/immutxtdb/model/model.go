@@ -1,15 +1,36 @@
-package immutxtdb
+package model
 
 import (
+	"encoding/binary"
+	"iter"
 	"time"
 )
 
-type IdxOrder int
+type Order int
 
 const (
-	TopToBottom IdxOrder = iota
+	TopToBottom Order = iota
 	BottomToTop
 )
+
+type State []byte
+
+func BuildState(size int, s string) State {
+	data := make([]byte, size)
+	_, err := binary.Encode(data, binary.BigEndian, []byte(s))
+	if err != nil {
+		panic(err)
+	}
+	return State(data)
+}
+
+type Index[K any, V any] interface {
+	Add(key K, val V) error
+	Paginate(key K, order Order, pageSize int) (*paginer[K, V], chan error)
+	PaginateAll(order Order, pageSize int) (*paginer[K, V], chan error)
+	All(order Order, errChan chan error) iter.Seq2[K, V]
+	Count() (int, error)
+}
 
 type Labels map[string]string
 
@@ -27,16 +48,33 @@ type Document struct {
 	metadata *Metadata
 }
 
-type layer struct {
+type LayerRef struct {
+	blocsFilepath string
+	blocId        int
+	state         State
+}
+
+func NewLayerRef(blocsFilepath string, blocId int, state State) *LayerRef {
+	return &LayerRef{blocsFilepath: blocsFilepath, blocId: blocId, state: state}
+}
+
+type Layer struct {
 	content  string
 	metadata *Metadata
 }
 
 type Bucket struct {
-	db     *DB
+	//db     *DB
 	uid    string
-	layers []*layer
+	layers []*LayerRef
 	//layers *paginer[string, *layer]
+}
+
+func NewBucket(uid string, layers []*LayerRef) *Bucket {
+	return &Bucket{
+		uid:    uid,
+		layers: layers,
+	}
 }
 
 func (b Bucket) Project() (Document, error) {
@@ -54,32 +92,6 @@ func (b Bucket) Commit() error {
 func (b Bucket) Squash() error {
 	panic("not implemented yet")
 }
-
-type idxEntry[K comparable, V any] interface {
-	Key() K
-	Val() V
-}
-
-type basicIdxEntry[K comparable, V any] struct {
-	key K
-	val V
-	err error
-}
-
-func (e basicIdxEntry[K, V]) Key() K {
-	return e.key
-}
-
-func (e basicIdxEntry[K, V]) Val() V {
-	return e.val
-}
-
-func (e basicIdxEntry[K, V]) Error() error {
-	return e.err
-}
-
-type bucketIdxEntry basicIdxEntry[string, bool]
-type layerIdxEntry basicIdxEntry[string, layer]
 
 // type cursor[K comparable, V any] struct {
 // 	pageSize int

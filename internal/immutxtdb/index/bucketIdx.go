@@ -1,69 +1,56 @@
-package immutxtdb
+package index
 
 import (
 	"bytes"
 	"fmt"
 	"io"
-	"iter"
 	"path/filepath"
 	"sync"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/encoder"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
 	"github.com/mxbossard/utilz/filez"
-	"github.com/mxbossard/utilz/inoutz"
 )
 
-const (
-	indexLineBufferSize = 1000
-	blocBufferSize      = 1000
-	delimiterChar       = ','
-	newLineChar         = '\n'
-	defaultPageSize     = 10
-)
-
-type index[K comparable, V any] interface {
-	Add(key K, val V) error
-	Paginate(key K, order IdxOrder, pageSize int) (*paginer[K, V], chan error)
-	PaginateAll(order IdxOrder, pageSize int) (*paginer[K, V], chan error)
-	All(order IdxOrder, errChan chan error) iter.Seq2[K, V]
-	Count() (int, error)
-}
-
-type bucketState int32
-
-const (
-	document bucketState = 0x1
-	dump     bucketState = 0x2
-)
-
-type bucketIndex struct {
+// (BUCKET_UID, STATE_PRIVATE_DATA)
+type BucketIndex struct {
+	model.Index[string, model.State]
 	*sync.Mutex
 	// FIXME: add a filelock
-	index[string, bucketState]
 
+	encoder        encoder.Encoder[string]
 	filepathes     []string
 	deviceIdxFiles []*filez.BlocsFile
 	otherIdxFiles  []*filez.BlocsFile
 	seqs           map[string]int
 }
 
-func newBucketIndex(bucketDir, device string) (*bucketIndex, error) {
+func NewBucketIndex(bucketDir, device string) (*BucketIndex, error) {
 	// Init bucketIndex
 	// FIXME: manage multiple idx files (rotation)
 	// FIXME: add a filelock
+	// FIXME: add BlocsEncryption
 	firstDeviceFilepath := filepath.Join(bucketDir, fmt.Sprintf("bucket-%s-001.idx", device))
 	dbf1, err := filez.NewBlocsFile(firstDeviceFilepath, 256, 100)
 	if err != nil {
 		return nil, err
 	}
-	return &bucketIndex{
+	e := encoder.NewAsciiEncoder(asciiEncoderDefaultVersion, asciiEncoderStateSize, asciiEncoderDataSize)
+	idx := &BucketIndex{
 		Mutex:          &sync.Mutex{},
+		encoder:        e,
 		deviceIdxFiles: []*filez.BlocsFile{dbf1},
 		otherIdxFiles:  nil,
 		seqs:           make(map[string]int),
-	}, nil
+	}
+
+	// FIXME: need to setup the encoder!
+	//e.Setup()
+
+	return idx, nil
 }
 
-func (i *bucketIndex) preload() error {
+func (i *BucketIndex) preload() error {
 	i.Lock()
 	defer i.Unlock()
 	// TODO: read current seq in all files
@@ -84,7 +71,8 @@ func (i *bucketIndex) preload() error {
 			return err
 		}
 
-		_, seq, _, err := decodeLastIndexLine[bool](buf.Bytes()[0:n])
+		seq, _, _, err := i.encoder.DecodeLastWord(buf.Bytes()[0:n])
+		// _, seq, _, err := decodeLastIndexLine[bool](buf.Bytes()[0:n])
 		if err != nil {
 			return err
 		}
@@ -94,11 +82,11 @@ func (i *bucketIndex) preload() error {
 	return nil
 }
 
-func (i *bucketIndex) selectDeviceBlocFile(uid string) *filez.BlocsFile {
+func (i *BucketIndex) selectDeviceBlocFile(uid string) *filez.BlocsFile {
 	return i.deviceIdxFiles[0]
 }
 
-func (i *bucketIndex) Add(uid string, state bucketState) error {
+func (i *BucketIndex) Add(uid string, s model.State) error {
 	i.Lock()
 	defer i.Unlock()
 	// TODO: write to block file
@@ -110,7 +98,8 @@ func (i *bucketIndex) Add(uid string, state bucketState) error {
 	seq := i.seqs[bfName]
 
 	// FIXME: use good byte encoding !
-	entry, err := encodeIndexLine(seq, []byte(uid), state)
+	entry, err := i.encoder.Encode(seq, s, uid)
+	// entry, err := encodeIndexLine(seq, []byte(uid), s)
 	if err != nil {
 		return err
 	}
@@ -123,7 +112,7 @@ func (i *bucketIndex) Add(uid string, state bucketState) error {
 	return nil
 }
 
-func (i *bucketIndex) Count() (int, error) {
+func (i *BucketIndex) Count() (int, error) {
 	// Should be performent and not read all the index to count lines.
 	i.Lock()
 	defer i.Unlock()
@@ -134,73 +123,28 @@ func (i *bucketIndex) Count() (int, error) {
 	return count, nil
 }
 
-func (i *bucketIndex) Paginate(key string, order IdxOrder, limit int) (*paginer[string, bucketState], chan error) {
+func (i *BucketIndex) Paginate(key string, order model.Order, limit int) (model.Paginer[string, model.State], chan error) {
 	panic("not implemented yet")
 }
 
-func (i *bucketIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, bucketState], chan error) {
+func (i *BucketIndex) PaginateAll(order model.Order, limit int) (model.Paginer[string, model.State], chan error) {
 	// TODO: cache all the bloc file content ?
 	// TODO: call all the index content ?
 	errChan := make(chan error)
 	idxFiles := append(i.deviceIdxFiles, i.otherIdxFiles...)
-	p := newPaginer(defaultPageSize, 0, func(push func(k string, v bucketState, err error) bool) {
+	p := model.NewPaginer(defaultPageSize, 0, func(push func(k string, v model.State, err error) bool) {
 		//panic("not implemented yet")
 		for _, bf := range idxFiles {
-			for b := range bf.All(filez.TopToBottom, errChan) {
-				buf := make([]byte, 1000)
-				n, err := b.Read(buf)
-				if err != nil && err != io.EOF {
-					panic(err)
-				}
-				fmt.Printf("encoded Bloc content: [%v]\n", buf[0:n])
-				sit := inoutz.NewSplitIterator(b, newLineChar, blocBufferSize)
-				for seq, line := range sit.All(errChan) {
-					fmt.Printf("encoded Bloc line: [%v]\n", line)
-					_ = seq
-					_, seq, uidBytes, err := decodeFirstIndexLine[[]byte](line)
-					_ = seq
-					// FIXME: push bucket state
-					uid := ""
-					if uidBytes != nil {
-						uid = string(*uidBytes)
-						fmt.Printf("decoding Bloc line: [%d,%s]\n", seq, uid)
-					} else {
-						fmt.Printf("decoding Bloc line: [%d]\n", seq)
-					}
-					if !push(uid, 0, err) {
+			for b := range bf.All(filez.BlocOrdering(order), errChan) {
+				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, s model.State, uid string, err error) {
+					if !push(uid, s, err) {
 						return
 					}
-				}
+				})
 			}
 		}
 	})
 	return p, errChan
-	panic("not implemented yet")
-}
-
-type layerIndex struct {
-	index[string, *layer]
-	filepathes []string
-}
-
-func (i *layerIndex) Add(uid string, l *layer) error {
-	// Write to plain text file but private data is hashed
-	panic("not implemented yet")
-}
-
-func (i *layerIndex) Count() (int, error) {
-	// FIXME: Is it needed ?
-	panic("not implemented yet")
-}
-
-func (i *layerIndex) Paginate(key string, order IdxOrder, limit int) (*paginer[string, *layer], chan error) {
-	// TODO: build a cursor to iterate of the layers of a bucket
-	panic("not implemented yet")
-}
-
-func (i *layerIndex) PaginateAll(order IdxOrder, limit int) (*paginer[string, *layer], chan error) {
-	// FIXME: Is it needed ?
-	panic("not implemented yet")
 }
 
 /*
