@@ -26,6 +26,8 @@ Organize notes by consolidating  topics afterwards, linking subjects, seeking in
   - objectives (life, yearly, monthly, weekly, daily)
   - mood trackers ?
   - habit trackers ?
+  - "repetition de letner" rappel d'un sujet à J+1, J+7, J+30
+  - Qu'est-je fais le mois dernier, l'an dernier, ...
 
 - Intelligent markdown
   - https://www.markdownlang.com/fr/cheatsheet/

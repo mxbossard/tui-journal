@@ -1,40 +1,13 @@
-package model
+package idx
 
 import (
 	"iter"
 )
 
-type IdxEntry[K any, V any] interface {
-	Key() K
-	Val() V
-	Error() error
-}
-
-type basicIdxEntry[K any, V any] struct {
-	key K
-	val V
-	err error
-}
-
-func (e basicIdxEntry[K, V]) Key() K {
-	return e.key
-}
-
-func (e basicIdxEntry[K, V]) Val() V {
-	return e.val
-}
-
-func (e basicIdxEntry[K, V]) Error() error {
-	return e.err
-}
-
-type BucketIdxEntry basicIdxEntry[string, bool]
-type BayerIdxEntry basicIdxEntry[string, Layer]
-
 type page[K any, V any] struct {
 	size    int
 	number  int
-	entries []IdxEntry[K, V]
+	entries []Entry[K, V]
 	err     error
 }
 
@@ -54,7 +27,7 @@ func (p page[K, V]) Number() int {
 }
 
 // Return all entries
-func (p page[K, V]) Entries() []IdxEntry[K, V] {
+func (p page[K, V]) Entries() []Entry[K, V] {
 	return p.entries
 }
 
@@ -64,8 +37,8 @@ func (p page[K, V]) Err() error {
 }
 
 // Entries iterator
-func (p *page[K, V]) All() iter.Seq2[int, IdxEntry[K, V]] {
-	return func(yield func(int, IdxEntry[K, V]) bool) {
+func (p *page[K, V]) All() iter.Seq2[int, Entry[K, V]] {
+	return func(yield func(int, Entry[K, V]) bool) {
 		for pos, e := range p.entries {
 			if !yield(pos, e) {
 				return
@@ -88,7 +61,7 @@ type paginer[K any, V any] struct {
 	preloadCount int
 	loaded       []*page[K, V]
 	current      int
-	pushed       chan IdxEntry[K, V]
+	pushed       chan Entry[K, V]
 	closed       bool
 	endReached   bool
 }
@@ -97,7 +70,7 @@ func (p *paginer[K, V]) buildPage(number int) *page[K, V] {
 	if p.endReached {
 		return nil
 	}
-	var entries []IdxEntry[K, V]
+	var entries []Entry[K, V]
 	// fmt.Printf("building page #%d ...\n", number)
 	var err error
 	for item := range p.pushed {
@@ -173,18 +146,18 @@ func (p *paginer[K, V]) All() iter.Seq2[error, *page[K, V]] {
 	}
 }
 
-func NewPaginer[K comparable, V any](pageSize, preloadPageCount int, pusher func(func(K, V, error) bool)) *paginer[K, V] {
+func NewPaginer[K any, V any](pageSize, preloadPageCount int, pusher func(func(State, K, V, error) bool)) *paginer[K, V] {
 	p := &paginer[K, V]{
 		//errChan:      errChan,
 		pageSize:     pageSize,
 		preloadCount: preloadPageCount,
 		loaded:       make([]*page[K, V], 0),
-		pushed:       make(chan IdxEntry[K, V], pageSize*preloadPageCount),
+		pushed:       make(chan Entry[K, V], pageSize*preloadPageCount),
 		current:      -1,
 	}
 	go func() {
-		pusher(func(k K, v V, err error) bool {
-			e := basicIdxEntry[K, V]{key: k, val: v, err: err}
+		pusher(func(s State, k K, v V, err error) bool {
+			e := BasicEntry[K, V]{key: k, val: v, state: s, err: err}
 			p.pushed <- &e
 			return !p.closed && err == nil
 		})

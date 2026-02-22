@@ -1,61 +1,68 @@
 package model
 
 import (
-	"encoding/binary"
-	"iter"
 	"time"
+
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 )
 
-type Order int
-
-const (
-	TopToBottom Order = iota
-	BottomToTop
-)
-
-type State []byte
-
-func BuildState(size int, s string) State {
-	data := make([]byte, size)
-	_, err := binary.Encode(data, binary.BigEndian, []byte(s))
-	if err != nil {
-		panic(err)
-	}
-	return State(data)
-}
-
-type Index[K any, V any] interface {
-	Add(key K, val V) error
-	Paginate(key K, order Order, pageSize int) (*paginer[K, V], chan error)
-	PaginateAll(order Order, pageSize int) (*paginer[K, V], chan error)
-	All(order Order, errChan chan error) iter.Seq2[K, V]
-	Count() (int, error)
-}
+type BucketIdxEntry idx.BasicEntry[string, bool]
+type BayerIdxEntry idx.BasicEntry[string, Layer]
 
 type Labels map[string]string
 
 type Metadata struct {
-	version    int
-	created    time.Time
-	updated    time.Time
-	labels     Labels
-	commited   bool
-	snapshoted bool
+	Version    int
+	Created    time.Time
+	Updated    time.Time
+	Labels     Labels
+	Commited   bool
+	Snapshoted bool
 }
 
 type Document struct {
-	content  string
-	metadata *Metadata
+	Content  string
+	Metadata *Metadata
+}
+
+type BlocRef struct {
+	BlocsFilepath string
+	BlocId        int
 }
 
 type LayerRef struct {
-	blocsFilepath string
-	blocId        int
-	state         State
+	*BlocRef
+	Pos int
+	Len int
+	// State         idx.State
 }
 
-func NewLayerRef(blocsFilepath string, blocId int, state State) *LayerRef {
-	return &LayerRef{blocsFilepath: blocsFilepath, blocId: blocId, state: state}
+type DocumentRef struct {
+	BucketUid string
+}
+
+type TextRef struct {
+	BucketUid string
+	Pos       int
+	Len       int
+}
+
+// func NewBlocRef(blocsFilepath string, blocId int, state idx.State) *LayerRef {
+// 	return &LayerRef{
+// 		BlocsFilepath: blocsFilepath,
+// 		BlocId:        blocId,
+// 		// State: state,
+// 	}
+// }
+
+func NewLayerRef(blocsFilepath string, blocId int, state idx.State) *LayerRef {
+	return &LayerRef{
+		BlocRef: &BlocRef{
+			BlocsFilepath: blocsFilepath,
+			BlocId:        blocId,
+		},
+		// State: state,
+	}
 }
 
 type Layer struct {

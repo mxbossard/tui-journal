@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +18,7 @@ func TestBucketIndex_Add(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	err = bIdx.Add("foo", Document)
+	err = bIdx.Add(Document, nil, "foo")
 	assert.NoError(t, err)
 }
 
@@ -34,23 +34,23 @@ func TestBucketIndex_Count(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	err = bIdx.Add("foo", Document)
+	err = bIdx.Add(Document, nil, "foo")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	err = bIdx.Add("bar", Document)
+	err = bIdx.Add(Document, nil, "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add("baz", Document)
+	err = bIdx.Add(Document, nil, "baz")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
-	err = bIdx.Add("foo", Document)
+	err = bIdx.Add(Document, nil, "foo")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
@@ -65,16 +65,16 @@ func TestBucketIndex_PaginateAll(t *testing.T) {
 	bIdx, err := NewBucketIndex(tmpDir, "test")
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add("foo", Document)
+	err = bIdx.Add(Document, nil, "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add("bar", Document)
+	err = bIdx.Add(Document, nil, "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add("baz", Document)
+	err = bIdx.Add(Document, nil, "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add("foo", Document)
+	err = bIdx.Add(Document, nil, "foo")
 	assert.NoError(t, err)
 
-	p, errChan := bIdx.PaginateAll(model.TopToBottom, 100)
+	p, errChan := bIdx.PaginateAll(idx.TopToBottom, 100)
 	require.NotNil(t, p)
 	require.NotNil(t, errChan)
 
@@ -86,12 +86,12 @@ func TestBucketIndex_PaginateAll(t *testing.T) {
 	require.True(t, page.Len() >= 4)
 
 	entries := page.Entries()
-	assert.Equal(t, "foo", entries[0].Key())
-	assert.Equal(t, "bar", entries[1].Key())
-	assert.Equal(t, "baz", entries[2].Key())
-	assert.Equal(t, "foo", entries[3].Key())
+	assert.Equal(t, "foo", entries[0].Val())
+	assert.Equal(t, "bar", entries[1].Val())
+	assert.Equal(t, "baz", entries[2].Val())
+	assert.Equal(t, "foo", entries[3].Val())
 
-	p2, errChan := bIdx.PaginateAll(model.BottomToTop, 100)
+	p2, errChan := bIdx.PaginateAll(idx.BottomToTop, 100)
 	require.NotNil(t, p2)
 	require.NotNil(t, errChan)
 
@@ -103,9 +103,9 @@ func TestBucketIndex_PaginateAll(t *testing.T) {
 	require.True(t, page.Len() >= 4)
 
 	entries2 := page2.Entries()
-	assert.Equal(t, "foo", entries2[0].Key())
-	assert.Equal(t, "baz", entries2[1].Key())
-	assert.Equal(t, "bar", entries2[2].Key())
-	assert.Equal(t, "foo", entries2[3].Key())
+	assert.Equal(t, "foo", entries2[0].Val())
+	assert.Equal(t, "baz", entries2[1].Val())
+	assert.Equal(t, "bar", entries2[2].Val())
+	assert.Equal(t, "foo", entries2[3].Val())
 
 }

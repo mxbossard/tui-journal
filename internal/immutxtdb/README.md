@@ -2,8 +2,13 @@
 
 ## TODO
 - [x] BlocsFile first impl
-- [_] Bucket & Layer indexs first impl
-- [_] Document & Text indexs first impl
+- [x] Bucket & Layer indexs first impl
+- [x] Document & Text indexs first impl
+- [x] Time index first impl
+- [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
+- [_] Implement RotatingHash, who's responsability ?
+- [_] Validate idx errChan usage
+- [_] Implem idx Filter methods
 - [_] A first text diff/layering impl (use a version / impl qualifier ?)
 - [_] Manage preloading of idx files ?
 - [_] Do we need to optimize "file reading stop" at snapshot layer ? Could provide a func to decide "preloading stop".
@@ -185,23 +190,26 @@ DB to store text documents
 
 ### Indexes
 #### Bucket index
-- Format: (BUCKET_UID, STATE_PRIVATE_DATA)
+- Format: CYPHER(BUCKET_UID, STATE_PRIVATE_DATA)
 - Encrypt all the files
 - STATE_PRIVATE_DATA 
 
 #### Layer index
-- Format: (RH(BUCKET_UID), RH(LAYER_FILE), BLOC_ID, STATE_PUBLIC_DATA)
+- Format: PLAIN(RH(BUCKET_UID), RH(LAYER_FILE), BLOC_ID, STATE_PUBLIC_DATA)
 - Use "Rotating Hash" to cipher bucket and layer to mitigate "usage data inference".
 - Store layer state (Snapshoted or not) to reduce read count if possible.
 - Store item states in index ?
 
 #### Document index
-- Format: (RH(TOPIC), RH(BUCKET_UID), STATE_PUBLIC_DATA)
+- Format: PLAIN(RH(TOPIC), RH(BUCKET_UID), STATE_PUBLIC_DATA)
 - Use "Rotating Hash" to cipher bucket and layer to mitigate "usage data inference".
 
 #### Text index
-- Format: (RH(TOPIC), RH(BUCKET_UID), POS, LEN, STATE_PUBLIC_DATA)
+- Format: PLAIN(RH(TOPIC), RH(BUCKET_UID), POS, LEN, STATE_PUBLIC_DATA)
 - Use "Rotating Hash" to cipher bucket and layer to mitigate "usage data inference".
+
+#### Time indexs
+- Format: PLAIN(TIME, RH(BUCKET_UID))
 
 #### Ideas
 - Only commited layers are referenced in document & text index ?

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/index"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
 	"github.com/mxbossard/utilz/errorz"
@@ -12,12 +13,17 @@ type Query struct {
 type DB struct {
 	rootPath string
 
-	bucketIdx *index.BucketIndex
-	layerIdx  *index.LayerIndex
+	bucketIdx index.BucketIndex
+	layerIdx  index.LayerIndex
+}
+
+func RotatingHashString(s string) []byte {
+	panic("not implemented yet")
 }
 
 func (d *DB) Bucket(uid string) (*model.Bucket, error) {
-	p, errChan := d.layerIdx.Paginate(uid, model.BottomToTop, 100)
+	rhUid := RotatingHashString(uid)
+	p, errChan := d.layerIdx.Paginate(rhUid, idx.BottomToTop, 100)
 
 	var layers []*model.LayerRef
 	for page, ok, err := p.Next(); ok; {

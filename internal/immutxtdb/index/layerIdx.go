@@ -1,69 +1,62 @@
 package index
 
 import (
-	"fmt"
-	"path/filepath"
-	"sync"
+	"bytes"
+	"encoding/binary"
+	"encoding/gob"
 
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/encoder"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
-	"github.com/mxbossard/utilz/filez"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
+	"github.com/mxbossard/utilz/inoutz"
 )
 
-// (RH(BUCKET_UID), RH(LAYER_FILE), BLOC_ID, STATE_PUBLIC_DATA)
-type LayerIndex struct {
-	model.Index[[]byte, *model.LayerRef]
-	*sync.Mutex
-	// FIXME: add a filelock
+const (
+	layerIdxStateSize = 8
+	layerIdxKeySize   = 32
+	layerIdxDataSize  = 200
+	layerIdxPageSize  = 10
+	layerIdxQualifier = "layer"
+)
 
-	encoder        encoder.Encoder[[]byte]
-	filepathes     []string
-	deviceIdxFiles []*filez.BlocsFile
-	otherIdxFiles  []*filez.BlocsFile
-	seqs           map[string]int
+var (
+	layerEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("layer000")))
+)
+
+type LayerIndex idx.Index[[]byte, *model.LayerRef]
+
+// (KEY: BUCKET_UID, STATE, VAL: LayerRef)
+func NewLayerIndex(indexDir, device string) (LayerIndex, error) {
+	ser := serialize.ByteSliceSerializer{}
+	enc := NewLayerRefEncoder(0, layerIdxStateSize, layerIdxKeySize, layerIdxDataSize)
+	return idx.NewBasicIndex(indexDir, layerIdxQualifier, device, ser, enc, layerIdxPageSize)
 }
 
-func NewLayerIndex(layerDir, device string) (*LayerIndex, error) {
-	// Init bucketIndex
-	// FIXME: manage multiple idx files (rotation)
-	// FIXME: add a filelock
-	// FIXME: addRotatingHash ?
-	firstDeviceFilepath := filepath.Join(layerDir, fmt.Sprintf("layer-%s-001.idx", device))
-	dbf1, err := filez.NewBlocsFile(firstDeviceFilepath, 256, 100)
-	if err != nil {
-		return nil, err
+type layerRefSerializer struct {
+	serialize.Serializer[*model.LayerRef]
+}
+
+func (s layerRefSerializer) Serialize(i *model.LayerRef, o []byte) error {
+	// FIXME: use rotating hash ?
+	bw := inoutz.NewByteSliceWriter(o)
+	var err error
+	if i != nil {
+		enc := gob.NewEncoder(bw)
+		err = enc.Encode(*i)
 	}
-	e := encoder.NewBytesEncoder(asciiEncoderDefaultVersion, asciiEncoderStateSize, asciiEncoderDataSize)
-	idx := &LayerIndex{
-		Mutex:          &sync.Mutex{},
-		encoder:        e,
-		deviceIdxFiles: []*filez.BlocsFile{dbf1},
-		otherIdxFiles:  nil,
-		seqs:           make(map[string]int),
-	}
+	return err
 
-	// FIXME: need to setup the encoder!
-	//e.Setup()
-
-	return idx, nil
 }
 
-func (i *LayerIndex) Add(uidHash []byte, l *model.LayerRef) error {
-	// Write to plain text file but private data is hashed
-	panic("not implemented yet")
+func (s layerRefSerializer) Deserialize(b []byte) (*model.LayerRef, error) {
+	buf := bytes.NewBuffer(b)
+	dec := gob.NewDecoder(buf)
+	var l model.LayerRef
+	err := dec.Decode(&l)
+	return &l, err
 }
 
-func (i *LayerIndex) Count() (int, error) {
-	// FIXME: Is it needed ?
-	panic("not implemented yet")
-}
-
-func (i *LayerIndex) Paginate(key string, order model.Order, limit int) (model.Paginer[[]byte, *model.LayerRef], chan error) {
-	// TODO: build a cursor to iterate of the layers of a bucket
-	panic("not implemented yet")
-}
-
-func (i *LayerIndex) PaginateAll(order model.Order, limit int) (model.Paginer[[]byte, *model.LayerRef], chan error) {
-	// FIXME: Is it needed ?
-	panic("not implemented yet")
+func NewLayerRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder[*model.LayerRef] {
+	// return idx.NewAbstractEncoder(layerEncoderEuid, version, stateSize, keySize, valSize, layerRefSerializer{})
+	return idx.NewAbstractEncoder(layerEncoderEuid, version, stateSize, keySize, valSize, gobSerializer[model.LayerRef]{})
 }
