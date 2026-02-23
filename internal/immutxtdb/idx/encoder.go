@@ -23,7 +23,7 @@ type IdxEncoder[V any] interface {
 	Setup(header []byte) error
 	Encode(seq int, s State, key []byte, val V) ([]byte, error)
 	// Decode first word in supplied byte slice.
-	Decode([]byte) (seq int, s State, k []byte, val V, err error)
+	Decode([]byte) (seq int, s State, key []byte, val V, err error)
 	// Decode last word in supplied byte slice.
 	DecodeLastWord([]byte) (seq int, s State, key []byte, val V, err error)
 	DecodeAll(Order, []byte, func(seq int, s State, key []byte, val V, err error))

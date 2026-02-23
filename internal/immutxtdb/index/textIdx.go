@@ -19,11 +19,11 @@ var (
 	textEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("txt00000")))
 )
 
-type TextIndex idx.Index[[]byte, *model.TextRef]
+type TextIndex idx.Index[*[128]byte, *model.TextRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: TextRef)
 func NewTextIndex(indexDir, device string) (TextIndex, error) {
-	ser := serialize.ByteSliceSerializer{}
+	ser := serialize.ByteArray128Serializer{}
 	enc := NewTextRefRefEncoder(0, textIdxStateSize, textIdxKeySize, textIdxDataSize)
 	return idx.NewBasicIndex(indexDir, "text", device, ser, enc, textIdxPageSize)
 }

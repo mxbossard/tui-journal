@@ -34,7 +34,7 @@ type State []byte
 var dummyState = BuildState(8, "dummy")
 
 type StateFilter func(s State, stop func()) bool
-type KeyFilter[K any] func(k K, s State, stop func()) bool
+type KeyFilter[K comparable] func(k K, s State, stop func()) bool
 
 func BuildState(size int, s string) State {
 	data := make([]byte, size)
@@ -45,7 +45,7 @@ func BuildState(size int, s string) State {
 	return State(data)
 }
 
-type Index[K any, V any] interface {
+type Index[K comparable, V any] interface {
 	Add(s State, key K, val V) error
 	Count() (int, error)
 	Filter(key K, order Order, pageSize int, sf StateFilter) (Paginer[K, V], chan error)
@@ -58,14 +58,14 @@ type Index[K any, V any] interface {
 type void struct{}
 type Void *void
 
-type Entry[K any, V any] interface {
+type Entry[K comparable, V any] interface {
 	Key() K
 	Val() V
 	State() State
 	Error() error
 }
 
-type BasicEntry[K any, V any] struct {
+type BasicEntry[K comparable, V any] struct {
 	key   K
 	val   V
 	state State
@@ -88,7 +88,7 @@ func (e BasicEntry[K, V]) Error() error {
 	return e.err
 }
 
-type basicIndex[K, V any] struct {
+type basicIndex[K comparable, V any] struct {
 	Index[K, V]
 	*sync.Mutex
 	// FIXME: add a filelock
@@ -102,7 +102,7 @@ type basicIndex[K, V any] struct {
 	seqs           map[string]int
 }
 
-func NewBasicIndex[K, V any](indexDir, qualifier, device string, ser serialize.Serializer[K], enc IdxEncoder[V], pageSize int) (*basicIndex[K, V], error) {
+func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, ser serialize.Serializer[K], enc IdxEncoder[V], pageSize int) (*basicIndex[K, V], error) {
 	// Init bucketIndex
 	// FIXME: manage multiple idx files (rotation)
 	// FIXME: add a filelock
@@ -128,7 +128,7 @@ func NewBasicIndex[K, V any](indexDir, qualifier, device string, ser serialize.S
 	return idx, nil
 }
 
-func (i *basicIndex[K, V]) selectDeviceBlocFile(s State, k []byte) *filez.BlocsFile {
+func (i *basicIndex[K, V]) selectDeviceBlocFile(s State, k K) *filez.BlocsFile {
 	return i.deviceIdxFiles[0]
 }
 
@@ -145,7 +145,7 @@ func (i *basicIndex[K, V]) Add(s State, k K, v V) error {
 		}
 	}
 
-	bf := i.selectDeviceBlocFile(s, key)
+	bf := i.selectDeviceBlocFile(s, k)
 	bfName := bf.Name()
 	seq := i.seqs[bfName]
 

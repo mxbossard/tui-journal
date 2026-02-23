@@ -141,6 +141,7 @@ func ConsumeErrorIfAny(errChan chan error) (err error) {
 	return
 }
 
+// Must return a list of dumps able to lazy load their layers.
 func UseCaseDump1_ListLast(count int) ([]*Dump, error) {
 	// 1- Browse bucket-time idx to find last dumps ref
 	idxService := NewIdxService()

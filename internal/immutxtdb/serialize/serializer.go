@@ -31,18 +31,25 @@ func (s ByteSliceSerializer) Deserialize(i []byte) ([]byte, error) {
 	return i, nil
 }
 
-// type ByteArraySerializer struct {
-// 	Serializer[*[128]byte]
-// }
+type ByteArray128Serializer struct {
+	Serializer[*[128]byte]
+}
 
-// func (s ByteArraySerializer) Serialize(i *[128]byte, o []byte) error {
-// 	o = i[:128]
-// 	return nil
-// }
+func (s ByteArray128Serializer) Serialize(i *[128]byte, o []byte) error {
+	for k := range 128 {
+		o[k] = (*i)[k]
+	}
+	return nil
+}
 
-// func (s ByteArraySerializer) Deserialize(i []byte) (*[128]byte, error) {
-// 	return &i, nil
-// }
+func (s ByteArray128Serializer) Deserialize(i []byte) (*[128]byte, error) {
+	var o [128]byte
+	// copy(o[:], i)
+	for k := 0; k < 128 && k < len(i); k++ {
+		o[k] = i[k]
+	}
+	return &o, nil
+}
 
 type PtrSerializer struct {
 	Serializer[[]byte]

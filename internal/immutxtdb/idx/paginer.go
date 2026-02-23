@@ -4,7 +4,7 @@ import (
 	"iter"
 )
 
-type page[K any, V any] struct {
+type page[K comparable, V any] struct {
 	size    int
 	number  int
 	entries []Entry[K, V]
@@ -47,14 +47,14 @@ func (p *page[K, V]) All() iter.Seq2[int, Entry[K, V]] {
 	}
 }
 
-type Paginer[K any, V any] interface {
+type Paginer[K comparable, V any] interface {
 	Close()
 	Prev() (*page[K, V], bool, error)
 	Next() (*page[K, V], bool, error)
 	All() iter.Seq2[error, *page[K, V]]
 }
 
-type paginer[K any, V any] struct {
+type paginer[K comparable, V any] struct {
 	Paginer[K, V]
 	errChan      chan error
 	pageSize     int
@@ -146,7 +146,7 @@ func (p *paginer[K, V]) All() iter.Seq2[error, *page[K, V]] {
 	}
 }
 
-func NewPaginer[K any, V any](pageSize, preloadPageCount int, pusher func(func(State, K, V, error) bool)) *paginer[K, V] {
+func NewPaginer[K comparable, V any](pageSize, preloadPageCount int, pusher func(func(State, K, V, error) bool)) *paginer[K, V] {
 	p := &paginer[K, V]{
 		//errChan:      errChan,
 		pageSize:     pageSize,

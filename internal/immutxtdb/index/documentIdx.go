@@ -10,7 +10,7 @@ import (
 
 const (
 	docIdxStateSize = 8
-	docIdxKeySize   = 32
+	docIdxKeySize   = 128
 	docIdxDataSize  = 200
 	docIdxPageSize  = 10
 	docIdxQualifier = "doc"
@@ -20,11 +20,11 @@ var (
 	docEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("doc00000")))
 )
 
-type DocIndex idx.Index[[]byte, *model.DocumentRef]
+type DocIndex idx.Index[*[docIdxKeySize]byte, *model.DocumentRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: DocumentRef)
 func NewDocumentIndex(indexDir, device string) (DocIndex, error) {
-	ser := serialize.ByteSliceSerializer{}
+	ser := serialize.ByteArray128Serializer{}
 	enc := NewDocumentRefEncoder(0, docIdxStateSize, docIdxKeySize, docIdxDataSize)
 	return idx.NewBasicIndex(indexDir, docIdxQualifier, device, ser, enc, docIdxPageSize)
 }
