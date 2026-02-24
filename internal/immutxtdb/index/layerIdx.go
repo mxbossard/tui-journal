@@ -23,34 +23,34 @@ var (
 	layerEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("layer000")))
 )
 
-type BucketUid [layerIdxKeySize]byte
+type HashedBucketUid [layerIdxKeySize]byte
 
-func stringToBucketUid(uid string) *BucketUid {
-	var a BucketUid
+func stringToBucketUid(uid string) *HashedBucketUid {
+	var a HashedBucketUid
 	copy(a[:], []byte(uid))
 	return &a
 }
 
 type BucketUidSerializer struct {
-	serialize.Serializer[BucketUid]
+	serialize.Serializer[HashedBucketUid]
 }
 
-func (s BucketUidSerializer) Serialize(i *BucketUid, o []byte) error {
+func (s BucketUidSerializer) Serialize(i *HashedBucketUid, o []byte) error {
 	for k := range len(i) {
 		o[k] = (*i)[k]
 	}
 	return nil
 }
 
-func (s BucketUidSerializer) Deserialize(i []byte) (*BucketUid, error) {
-	var o BucketUid
+func (s BucketUidSerializer) Deserialize(i []byte) (*HashedBucketUid, error) {
+	var o HashedBucketUid
 	for k := 0; k < len(o) && k < len(i); k++ {
 		(o)[k] = i[k]
 	}
 	return &o, nil
 }
 
-type LayerIndex idx.Index[*BucketUid, *model.LayerRef]
+type LayerIndex idx.Index[*HashedBucketUid, *model.LayerRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: LayerRef)
 func NewLayerIndex(indexDir, device string) (LayerIndex, error) {

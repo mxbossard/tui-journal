@@ -64,7 +64,7 @@ func ForgeDumpName(device string, when time.Time) string {
 	return fmt.Sprintf("dump-%s-%d", device, when.Unix())
 }
 
-func RotatingHashString(s string) ([]byte, error) {
+func RotatingHashString(s string) (*index.HashedBucketUid, error) {
 	panic("not implemented yet")
 }
 
@@ -93,7 +93,7 @@ func UseCaseDump0_Create(device, txt string) (*Dump, error) {
 	if err != nil {
 		return nil, err
 	}
-	idxService.bucketByTimeIdx.Add(dumpNewState, now, bucketRhUid)
+	idxService.bucketByTimeIdx.Add(dumpNewState, now, bucketRhUid[:])
 
 	// 3- Store the content
 	blocRef, blocWriter, pos, err := GetBlocWriter(device)
@@ -149,7 +149,7 @@ func UseCaseDump1_ListLast(count int) ([]*Dump, error) {
 		return bytes.Equal(s[0:3], dumpState[0:3])
 	}
 	k := 0
-	var bucketRhUids [][128]byte
+	var bucketRhUids []*index.HashedBucketUid
 	paginer, errChan := idxService.bucketByTimeIdx.FilterAll(idx.BottomToTop, 10, dumpStateFilter, nil)
 BucketLoop:
 	for err, page := range paginer.All() {
@@ -168,16 +168,16 @@ BucketLoop:
 			}
 			// var array [128]byte
 			// copy(array[:], entry.Val())
-			array := [128]byte(entry.Val())
-			bucketRhUids = append(bucketRhUids, array)
+			array := index.HashedBucketUid(entry.Val())
+			bucketRhUids = append(bucketRhUids, &array)
 		}
 	}
 
 	layerStateFilter := func(s idx.State, stop func()) bool {
 		return bytes.Equal(s[0:3], layerState[0:3])
 	}
-	var snapshotedLayersRhUids [][128]byte
-	layerFilter := func(k [128]byte, s idx.State, stop func()) bool {
+	var snapshotedLayersRhUids []*index.HashedBucketUid
+	layerFilter := func(k *index.HashedBucketUid, s idx.State, stop func()) bool {
 		if slices.Contains(bucketRhUids, k) {
 			if slices.Contains(snapshotedLayersRhUids, k) {
 				return false
@@ -207,7 +207,7 @@ BucketLoop:
 			if k == count {
 				return dumps, nil
 			}
-			layersByRhUid[[128]byte(entry.Key())] = append(layersByRhUid[[128]byte(entry.Key())], entry.Val())
+			layersByRhUid[*entry.Key()] = append(layersByRhUid[*entry.Key()], entry.Val())
 		}
 	}
 
