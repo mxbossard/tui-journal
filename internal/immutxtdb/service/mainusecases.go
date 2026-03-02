@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"iter"
 	"slices"
 	"time"
 
@@ -14,16 +15,9 @@ import (
 )
 
 // Aggregation of layers
-type Dump struct {
-	Uid       string
-	Metadata  model.Metadata
-	LayerRefs []*model.LayerRef
-}
+type Dump model.Bucket
 
-type Doc struct {
-	Uid      string
-	Metadata model.Metadata
-}
+type Doc model.Bucket
 
 type Layer string
 
@@ -32,10 +26,27 @@ type Text string
 type Topic string
 
 /*
-- What is the difference between dump and doc ?
+## What is the difference between dump and doc ?
   - Dump is an immutable journal log entry attached to only one day. Implemented by a collection of layers.
   - Doc is a named & editable document. Implemented by a collection of layers.
   - => No difference in implementation ?
+
+## Main questions :
+- What Metadata ?
+- Where to store Metadata ?
+- On what attach Metadata ? Layer ? Bucket ? Doc ?
+
+## Model
+- Doc
+- Dump ? is it a Doc ?
+- Metadata
+- Bucket
+- Layer
+- Where are stored Metadata ?
+- Do we need Metadata when listing docs/dumps ?
+- Do we want to attach metadata to Layer or to Doc ?
+
+### Metadata
 
 */
 
@@ -118,16 +129,27 @@ func UseCaseDump0_Create(device, txt string) (*Dump, error) {
 	}
 	idxService.layerIdx.Add(rootLayerState, rhBucketUid, layerRef)
 
+	// rootLayer := model.Layer{
+	// 	Metadata: model.LayerMetadata{
+	// 		Version: 0, // First layer
+	// 		Created: now,
+	// 	},
+	// 	Commited:   false,
+	// 	Snapshoted: true, // First layer snapshoted by definition
+	// }
+
+	var layerRefIt iter.Seq[*model.LayerRef] = func(yield func(*model.LayerRef) bool) {
+		yield(layerRef)
+	}
+
 	d := &Dump{
-		Uid: name,
-		Metadata: model.Metadata{
-			Version:    0, // First layer
-			Created:    now,
-			Updated:    now,
-			Labels:     nil,
-			Commited:   false,
-			Snapshoted: true, // First layer snapshoted by definition
+		Uid: model.BucketUid(name),
+		Metadata: model.BucketMetadata{
+			Created: now,
+			Updated: now,
+			Labels:  nil,
 		},
+		LayerRefIt: layerRefIt,
 	}
 	return d, nil
 }
@@ -211,12 +233,15 @@ BucketLoop:
 		}
 	}
 
+	var layerRefIt iter.Seq[*model.LayerRef]
+
 	for rhUid, layerRefs := range layersByRhUid {
 		// FIXME: need to find UID
 		// FIXME: do not have metadata here ? Where are stored metadatas ? Do we need Metadata before projecting the document ?
+		_ = layerRefs
 		d := &Dump{
-			Uid:       string(rhUid[:]),
-			LayerRefs: layerRefs,
+			Uid:        model.BucketUid((rhUid[:])),
+			LayerRefIt: layerRefIt,
 		}
 		dumps = append(dumps, d)
 	}

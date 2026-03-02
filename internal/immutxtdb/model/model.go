@@ -1,6 +1,7 @@
 package model
 
 import (
+	"iter"
 	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
@@ -9,21 +10,17 @@ import (
 type BucketIdxEntry idx.BasicEntry[string, bool]
 type BayerIdxEntry idx.BasicEntry[string, Layer]
 
+/*
+- BucketRef -> []LayerRef -> []BlocRef
+- Bucket -> []Layers => Document => [](MetaData + Data)
+- List Buckets (= list documents) by name, time, topics
+-
+*/
+
+type BucketUid string
+type HashedBucketUid [128]byte
+
 type Labels map[string]string
-
-type Metadata struct {
-	Version    int
-	Created    time.Time
-	Updated    time.Time
-	Labels     Labels
-	Commited   bool
-	Snapshoted bool
-}
-
-type Document struct {
-	Content  string
-	Metadata *Metadata
-}
 
 type BlocRef struct {
 	BlocsFilepath string
@@ -37,12 +34,12 @@ type LayerRef struct {
 	// State         idx.State
 }
 
-type DocumentRef struct {
-	BucketUid string
+type BucketRef struct {
+	Uid BucketUid
 }
 
 type TextRef struct {
-	BucketUid string
+	BucketUid BucketUid
 	Pos       int
 	Len       int
 }
@@ -65,26 +62,33 @@ func NewLayerRef(blocsFilepath string, blocId int, state idx.State) *LayerRef {
 	}
 }
 
+type LayerMetadata struct {
+	Version int
+	Created time.Time
+}
+
 type Layer struct {
-	content  string
-	metadata *Metadata
+	Metadata   LayerMetadata
+	Content    []byte
+	Commited   bool
+	Snapshoted bool
+}
+
+type BucketMetadata struct {
+	Version int
+	Created time.Time
+	Updated time.Time
+	Labels  Labels
 }
 
 type Bucket struct {
-	//db     *DB
-	uid    string
-	layers []*LayerRef
-	//layers *paginer[string, *layer]
+	Uid        BucketUid
+	Metadata   BucketMetadata
+	LayerRefIt iter.Seq[*LayerRef]
+	layers     []*Layer
 }
 
-func NewBucket(uid string, layers []*LayerRef) *Bucket {
-	return &Bucket{
-		uid:    uid,
-		layers: layers,
-	}
-}
-
-func (b Bucket) Project() (Document, error) {
+func (b Bucket) Project() (string, error) {
 	panic("not implemented yet")
 }
 

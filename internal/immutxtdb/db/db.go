@@ -35,7 +35,9 @@ func (d *DB) Bucket(uid string) (*model.Bucket, error) {
 			layers = append(layers, entry.Val())
 		}
 	}
-	b := model.NewBucket(uid, layers)
+
+	panic("not implemented yet")
+	b := &model.Bucket{Uid: model.BucketUid(uid)}
 
 	return b, errorz.ConsumedAggregated(errChan)
 }

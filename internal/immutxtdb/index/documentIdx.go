@@ -20,7 +20,7 @@ var (
 	docEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("doc00000")))
 )
 
-type DocIndex idx.Index[*[docIdxKeySize]byte, *model.DocumentRef]
+type DocIndex idx.Index[*[docIdxKeySize]byte, *model.BucketRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: DocumentRef)
 func NewDocumentIndex(indexDir, device string) (DocIndex, error) {
@@ -29,6 +29,6 @@ func NewDocumentIndex(indexDir, device string) (DocIndex, error) {
 	return idx.NewBasicIndex(indexDir, docIdxQualifier, device, ser, enc, docIdxPageSize)
 }
 
-func NewDocumentRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder[*model.DocumentRef] {
-	return idx.NewAbstractEncoder(docEncoderEuid, version, stateSize, keySize, valSize, gobSerializer[model.DocumentRef]{})
+func NewDocumentRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder[*model.BucketRef] {
+	return idx.NewAbstractEncoder(docEncoderEuid, version, stateSize, keySize, valSize, gobSerializer[model.BucketRef]{})
 }

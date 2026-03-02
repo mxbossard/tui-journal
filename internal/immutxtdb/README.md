@@ -27,6 +27,7 @@ DB to store text documents
 
 ## Definitions
 - document : a text document stored in DB.
+- dump : a log/journal/diary entry, (text document) "Read Only" attached to only one day
 - bucket : a collection of layers mergeable into a document (a projection).
 - layer : patch of document attached with metadata and a version
 - version : version of the document
@@ -120,6 +121,7 @@ DB to store text documents
 ### Metadata
 - Ref a version
 - Ref a creation time
+- Ref an update time
 - Ref labels
 
 ### Version
