@@ -54,9 +54,11 @@ type LayerIndex idx.Index[*HashedBucketUid, *model.LayerRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: LayerRef)
 func NewLayerIndex(indexDir, device string) (LayerIndex, error) {
-	ser := BucketUidSerializer{}
+	keySer := BucketUidSerializer{}
+	// keySer := serialize.AsciiSerializer{}
+	valSer := gobSerializer[model.LayerRef]{}
 	enc := NewLayerRefEncoder(0, LayerIdxStateSize, LayerIdxKeySize, LayerIdxDataSize)
-	return idx.NewBasicIndex(indexDir, LayerIdxQualifier, device, ser, enc, LayerIdxPageSize)
+	return idx.NewBasicIndex(indexDir, LayerIdxQualifier, device, keySer, valSer, RotatingHasher, nil, enc, LayerIdxPageSize)
 }
 
 type layerRefSerializer struct {
@@ -83,7 +85,7 @@ func (s layerRefSerializer) Deserialize(b []byte) (*model.LayerRef, error) {
 	return &l, err
 }
 
-func NewLayerRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder[*model.LayerRef] {
+func NewLayerRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder {
 	// return idx.NewAbstractEncoder(layerEncoderEuid, version, stateSize, keySize, valSize, layerRefSerializer{})
-	return idx.NewAbstractEncoder(layerEncoderEuid, version, stateSize, keySize, valSize, gobSerializer[model.LayerRef]{})
+	return idx.NewBasicEncoder(layerEncoderEuid, version, stateSize, keySize, valSize)
 }

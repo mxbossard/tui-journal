@@ -95,7 +95,10 @@ type basicIndex[K comparable, V any] struct {
 	// FIXME: add a filelock
 
 	keySerializer  serialize.Serializer[K]
-	encoder        IdxEncoder[V] // FIXME: encoder must be attached to each BlocsFile or to each Bloc !
+	valSerializer  serialize.Serializer[V]
+	keyHasher      RotatingHasher
+	valHasher      RotatingHasher
+	encoder        IdxEncoder // FIXME: encoder must be attached to each BlocsFile or to each Bloc !
 	pageSize       int
 	filepathes     []string
 	deviceIdxFiles []*filez.BlocsFile
@@ -103,7 +106,7 @@ type basicIndex[K comparable, V any] struct {
 	seqs           map[string]int
 }
 
-func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, ser serialize.Serializer[K], enc IdxEncoder[V], pageSize int) (*basicIndex[K, V], error) {
+func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, keySer serialize.Serializer[K], valSer serialize.Serializer[V], keyH, valH RotatingHasher, enc IdxEncoder, pageSize int) (*basicIndex[K, V], error) {
 	// Init bucketIndex
 	// FIXME: manage multiple idx files (rotation)
 	// FIXME: add a filelock
@@ -115,7 +118,10 @@ func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, ser 
 	}
 	idx := &basicIndex[K, V]{
 		Mutex:          &sync.Mutex{},
-		keySerializer:  ser,
+		keySerializer:  keySer,
+		valSerializer:  valSer,
+		keyHasher:      keyH,
+		valHasher:      valH,
 		encoder:        enc,
 		pageSize:       pageSize,
 		deviceIdxFiles: []*filez.BlocsFile{dbf1},
@@ -153,8 +159,12 @@ func (i *basicIndex[K, V]) Add(s State, k K, v V) error {
 	// FIXME: change v type to []byte in Encode() signature.
 	// FIXME: add a Value Serializer to encode value v into []byte.
 	// TODO: add 2 optionals RotatingHasher to hash key and value
-
-	entry, err := i.encoder.Encode(seq, s, key, v)
+	val := make([]byte, i.encoder.ValSize())
+	err = i.valSerializer.Serialize(v, val)
+	if err != nil {
+		return err
+	}
+	entry, err := i.encoder.Encode(seq, s, key, val)
 	if err != nil {
 		return err
 	}
@@ -197,7 +207,7 @@ func (i *basicIndex[K, V]) Paginate(key K, order Order, limit int) (Paginer[K, V
 		//panic("not implemented yet")
 		for _, bf := range idxFiles {
 			for b := range bf.All(filez.BlocOrdering(order), errChan) {
-				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, s State, key []byte, val V, err error) {
+				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, s State, key []byte, val []byte, err error) {
 					if err != nil {
 						errChan <- err
 						return
@@ -208,7 +218,11 @@ func (i *basicIndex[K, V]) Paginate(key K, order Order, limit int) (Paginer[K, V
 						if i.keySerializer != nil {
 							k, err = i.keySerializer.Deserialize(key)
 						}
-						if !push(s, k, val, err) {
+						var v V
+						if i.valSerializer != nil {
+							v, err = i.valSerializer.Deserialize(val)
+						}
+						if !push(s, k, v, err) {
 							return
 						}
 					}
@@ -230,7 +244,7 @@ func (i *basicIndex[K, V]) PaginateAll(order Order, limit int) (Paginer[K, V], c
 		//panic("not implemented yet")
 		for _, bf := range idxFiles {
 			for b := range bf.All(filez.BlocOrdering(order), errChan) {
-				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, s State, key []byte, val V, err error) {
+				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, s State, key []byte, val []byte, err error) {
 					if err != nil {
 						errChan <- err
 						return
@@ -240,7 +254,11 @@ func (i *basicIndex[K, V]) PaginateAll(order Order, limit int) (Paginer[K, V], c
 					if i.keySerializer != nil {
 						k, err = i.keySerializer.Deserialize(key)
 					}
-					if !push(s, k, val, err) {
+					var v V
+					if i.valSerializer != nil {
+						v, err = i.valSerializer.Deserialize(val)
+					}
+					if !push(s, k, v, err) {
 						return
 					}
 				})

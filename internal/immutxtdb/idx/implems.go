@@ -2,8 +2,6 @@ package idx
 
 import (
 	"encoding/binary"
-
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 )
 
 var (
@@ -12,18 +10,18 @@ var (
 	asciiEncoderEuid = Euid(binary.BigEndian.Uint64([]byte("ascii000")))
 )
 
-func NewVoidEncoder(version int32, stateSize, keySize, valSize int) IdxEncoder[Void] {
-	return NewAbstractEncoder[Void](voidEncoderEuid, version, stateSize, keySize, valSize, nil)
+func NewVoidEncoder(version int32, stateSize, keySize, valSize int) IdxEncoder {
+	return NewBasicEncoder(voidEncoderEuid, version, stateSize, keySize, valSize)
 }
 
-func NewByteSliceEncoder(version int32, stateSize, keySize, valSize int) IdxEncoder[[]byte] {
-	return NewAbstractEncoder[[]byte](bytesEncoderEuid, version, stateSize, keySize, valSize, nil)
+func NewByteSliceEncoder(version int32, stateSize, keySize, valSize int) IdxEncoder {
+	return NewBasicEncoder(bytesEncoderEuid, version, stateSize, keySize, valSize)
 }
 
-func NewByteArrayEncoder(version int32, stateSize, keySize, valSize int) IdxEncoder[[128]byte] {
-	return NewAbstractEncoder[[128]byte](bytesEncoderEuid, version, stateSize, keySize, valSize, nil)
+func NewByteArrayEncoder(version int32, stateSize, keySize, valSize int) IdxEncoder {
+	return NewBasicEncoder(bytesEncoderEuid, version, stateSize, keySize, valSize)
 }
 
-func NewAsciiEncoder(version int32, stateSize, keySize, valSize int) IdxEncoder[string] {
-	return NewAbstractEncoder(asciiEncoderEuid, version, stateSize, keySize, valSize, serialize.AsciiSerializer{})
+func NewAsciiEncoder(version int32, stateSize, keySize, valSize int) IdxEncoder {
+	return NewBasicEncoder(asciiEncoderEuid, version, stateSize, keySize, valSize)
 }

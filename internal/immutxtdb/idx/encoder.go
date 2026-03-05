@@ -4,8 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 )
 
 type Euid uint64
@@ -13,7 +11,7 @@ type Euid uint64
 var NotMatchingEncoder = errors.New("encoder dos not match")
 var NotAsciiText = errors.New("supplied text is out of ASCII table")
 
-type IdxEncoder[V any] interface {
+type IdxEncoder interface {
 	StateSize() int
 	KeySize() int
 	ValSize() int
@@ -21,53 +19,50 @@ type IdxEncoder[V any] interface {
 	Header() []byte
 	Match(header []byte) bool
 	Setup(header []byte) error
-	Encode(seq int, s State, key []byte, val V) ([]byte, error)
+	Encode(seq int, s State, key []byte, val []byte) ([]byte, error)
 	// Decode first word in supplied byte slice.
-	Decode([]byte) (seq int, s State, key []byte, val V, err error)
+	Decode([]byte) (seq int, s State, key []byte, val []byte, err error)
 	// Decode last word in supplied byte slice.
-	DecodeLastWord([]byte) (seq int, s State, key []byte, val V, err error)
-	DecodeAll(Order, []byte, func(seq int, s State, key []byte, val V, err error))
+	DecodeLastWord([]byte) (seq int, s State, key []byte, val []byte, err error)
+	DecodeAll(Order, []byte, func(seq int, s State, key []byte, val []byte, err error))
 }
 
-type basicIdxEncoder[V any] struct {
-	IdxEncoder[V]
+type basicIdxEncoder struct {
+	IdxEncoder
 	stateSize int
 	keySize   int
 	valSize   int
 	uid       Euid
 	version   int32
-	//keyEncoder Serializer[*K]
-	valEncoder serialize.Serializer[V]
 }
 
-func NewAbstractEncoder[V any](uid Euid, version int32, stateSize, keySize, valSize int, valEncoder serialize.Serializer[V]) *basicIdxEncoder[V] {
-	return &basicIdxEncoder[V]{
-		uid:        uid,
-		version:    version,
-		stateSize:  stateSize,
-		keySize:    keySize,
-		valSize:    valSize,
-		valEncoder: valEncoder,
+func NewBasicEncoder(uid Euid, version int32, stateSize, keySize, valSize int) *basicIdxEncoder {
+	return &basicIdxEncoder{
+		uid:       uid,
+		version:   version,
+		stateSize: stateSize,
+		keySize:   keySize,
+		valSize:   valSize,
 	}
 }
 
-func (e basicIdxEncoder[V]) StateSize() int {
+func (e basicIdxEncoder) StateSize() int {
 	return int(e.stateSize)
 }
 
-func (e basicIdxEncoder[V]) KeySize() int {
+func (e basicIdxEncoder) KeySize() int {
 	return int(e.keySize)
 }
 
-func (e basicIdxEncoder[V]) ValSize() int {
+func (e basicIdxEncoder) ValSize() int {
 	return int(e.valSize)
 }
 
-func (e basicIdxEncoder[V]) WordSize() int {
+func (e basicIdxEncoder) WordSize() int {
 	return 8 + int(e.stateSize) + int(e.keySize) + int(e.valSize)
 }
 
-func (e basicIdxEncoder[V]) Header() []byte {
+func (e basicIdxEncoder) Header() []byte {
 	b := make([]byte, e.WordSize())
 	k := 0
 	n, err := binary.Encode(b[k:k+8], binary.BigEndian, e.uid)
@@ -98,7 +93,7 @@ func (e basicIdxEncoder[V]) Header() []byte {
 	return b
 }
 
-func (e *basicIdxEncoder[V]) Match(header []byte) bool {
+func (e *basicIdxEncoder) Match(header []byte) bool {
 	if len(header) < 12 {
 		return false
 	}
@@ -118,7 +113,7 @@ func (e *basicIdxEncoder[V]) Match(header []byte) bool {
 	return euid == e.uid && version == e.version
 }
 
-func (e *basicIdxEncoder[V]) Setup(header []byte) error {
+func (e *basicIdxEncoder) Setup(header []byte) error {
 	if len(header) < 20 {
 		return errors.New("need a header of 20 bytes minimum to setup")
 	}
@@ -152,7 +147,7 @@ func (e *basicIdxEncoder[V]) Setup(header []byte) error {
 	return nil
 }
 
-func (e basicIdxEncoder[V]) Encode(seq int, s State, k []byte, v V) ([]byte, error) {
+func (e basicIdxEncoder) Encode(seq int, s State, k []byte, v []byte) ([]byte, error) {
 	// if k == nil {
 	// 	panic("key must not be nil")
 	// }
@@ -160,18 +155,18 @@ func (e basicIdxEncoder[V]) Encode(seq int, s State, k []byte, v V) ([]byte, err
 		return nil, errors.New("key is longer than configured keySize")
 	}
 
-	val := make([]byte, e.valSize)
-	if b, ok := any(v).([]byte); ok {
-		val = b
-		// } else if rv := reflect.ValueOf(v); !rv.IsNil() {
-	} else if e.valEncoder != nil {
-		var err error
-		err = e.valEncoder.Serialize(v, val)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if len(val) > e.valSize {
+	// val := make([]byte, e.valSize)
+	// if b, ok := any(v).([]byte); ok {
+	// 	val = b
+	// 	// } else if rv := reflect.ValueOf(v); !rv.IsNil() {
+	// } else if e.valSerializer != nil {
+	// 	var err error
+	// 	err = e.valSerializer.Serialize(v, val)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+	if len(v) > e.valSize {
 		return nil, errors.New("data is longer than configured dataSize")
 	}
 
@@ -197,7 +192,7 @@ func (e basicIdxEncoder[V]) Encode(seq int, s State, k []byte, v V) ([]byte, err
 		i += e.keySize
 	}
 
-	valLen := len(val)
+	valLen := len(v)
 	n, err = binary.Encode(buf[i:], binary.BigEndian, int32(valLen))
 	if err != nil {
 		return nil, fmt.Errorf("encoding value length: %w", err)
@@ -205,7 +200,7 @@ func (e basicIdxEncoder[V]) Encode(seq int, s State, k []byte, v V) ([]byte, err
 	i += n
 
 	if valLen > 0 {
-		n, err = binary.Encode(buf[i:], binary.BigEndian, val)
+		n, err = binary.Encode(buf[i:], binary.BigEndian, v)
 		if err != nil {
 			return nil, fmt.Errorf("encoding value: %w", err)
 		}
@@ -215,11 +210,11 @@ func (e basicIdxEncoder[V]) Encode(seq int, s State, k []byte, v V) ([]byte, err
 	return buf, nil
 }
 
-func (e *basicIdxEncoder[V]) Decode(buf []byte) (int, State, []byte, V, error) {
+func (e *basicIdxEncoder) Decode(buf []byte) (int, State, []byte, []byte, error) {
 	var seq, dataLen int32
 	var s State
 	var key []byte
-	var val V
+	var val []byte
 	// fmt.Printf("decoding config: statSize: %d ; dataSize: %d\n", e.stateSize, e.dataSize)
 
 	if len(buf) < e.WordSize() {
@@ -259,33 +254,33 @@ func (e *basicIdxEncoder[V]) Decode(buf []byte) (int, State, []byte, V, error) {
 	}
 
 	if dataLen > 0 {
-		valData := make([]byte, dataLen)
-		n, err = binary.Decode(buf[k:k+int(dataLen)], binary.BigEndian, &valData)
+		val = make([]byte, dataLen)
+		n, err = binary.Decode(buf[k:k+int(dataLen)], binary.BigEndian, &val)
 		if err != nil {
 			return int(seq), s, key, val, fmt.Errorf("decoding value: %w", err)
 		}
 		k += e.valSize
 
-		if _, ok := any(val).([]byte); ok {
-			val = any(valData).(V)
-		} else if e.valEncoder != nil {
-			val, err = e.valEncoder.Deserialize(valData)
-			if err != nil {
-				return int(seq), s, key, val, fmt.Errorf("deserializing value: %w", err)
-			}
-		}
+		// if _, ok := any(val).([]byte); ok {
+		// 	val = any(valData).(V)
+		// } else if e.valSerializer != nil {
+		// 	val, err = e.valSerializer.Deserialize(valData)
+		// 	if err != nil {
+		// 		return int(seq), s, key, val, fmt.Errorf("deserializing value: %w", err)
+		// 	}
+		// }
 	}
 
 	return int(seq), s, key, val, nil
 
 }
 
-func (e *basicIdxEncoder[V]) DecodeLastWord(buf []byte) (int, State, []byte, V, error) {
+func (e *basicIdxEncoder) DecodeLastWord(buf []byte) (int, State, []byte, []byte, error) {
 	lastWordStart := (len(buf)/e.WordSize() - 1) * e.WordSize()
 	return e.Decode(buf[lastWordStart:])
 }
 
-func (e basicIdxEncoder[V]) DecodeAll(order Order, buf []byte, push func(int, State, []byte, V, error)) {
+func (e basicIdxEncoder) DecodeAll(order Order, buf []byte, push func(int, State, []byte, []byte, error)) {
 	wordSize := e.WordSize()
 	if order == TopToBottom {
 		for k := 0; k < len(buf); k += wordSize {

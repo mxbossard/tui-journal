@@ -5,7 +5,6 @@ import (
 	_ "fmt"
 	"testing"
 
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +16,7 @@ func TestBasicEncoder_Header(t *testing.T) {
 	expectedWordSize := 8 + expectedStateSize + expectedKeySize + expectedValSize
 
 	// Encode & Decode with AsciiEncoder
-	e1 := NewAbstractEncoder[[]byte](bytesEncoderEuid, 0, expectedStateSize, expectedKeySize, expectedValSize, nil)
+	e1 := NewBasicEncoder(bytesEncoderEuid, 0, expectedStateSize, expectedKeySize, expectedValSize)
 	assert.NotNil(t, e1)
 	assert.Equal(t, expectedWordSize, e1.WordSize())
 	header := e1.Header()
@@ -30,7 +29,7 @@ func TestBasicEncoder_Match(t *testing.T) {
 	expectedKeySize := 32
 	expectedValSize := 100
 	expectedWordSize := 8 + expectedStateSize + expectedKeySize + expectedValSize
-	e1 := NewAbstractEncoder[[]byte](bytesEncoderEuid, 0, expectedStateSize, expectedKeySize, expectedValSize, nil)
+	e1 := NewBasicEncoder(bytesEncoderEuid, 0, expectedStateSize, expectedKeySize, expectedValSize)
 	assert.NotNil(t, e1)
 	assert.Equal(t, expectedWordSize, e1.WordSize())
 	header := e1.Header()
@@ -46,7 +45,7 @@ func TestBasicEncoder_EncodeDecode(t *testing.T) {
 	expectedKeySize := 8
 	expectedValSize := 100
 	expectedWordSize := 8 + expectedStateSize + expectedKeySize + expectedValSize
-	e1 := NewAbstractEncoder[[]byte](bytesEncoderEuid, 0, expectedStateSize, expectedKeySize, expectedValSize, nil)
+	e1 := NewBasicEncoder(bytesEncoderEuid, 0, expectedStateSize, expectedKeySize, expectedValSize)
 	assert.NotNil(t, e1)
 	assert.Equal(t, expectedWordSize, e1.WordSize())
 	header := e1.Header()
@@ -76,7 +75,7 @@ func TestBasicEncoder_EncodeDecode(t *testing.T) {
 	assert.Equal(t, expectedVal, val)
 
 	// Setup & Decode with a new AsciiEncoder
-	e2 := NewAbstractEncoder[[]byte](bytesEncoderEuid, 0, 0, 0, 0, nil)
+	e2 := NewBasicEncoder(bytesEncoderEuid, 0, 0, 0, 0)
 	_, _, _, _, err = e2.Decode(buf)
 	assert.Error(t, err) // Not configured error
 
@@ -115,12 +114,12 @@ func TestBasicEncoder_DecodeAll(t *testing.T) {
 	expectedKey2 := append(key2, 0, 0)
 	key3 := []byte("k3")
 	expectedKey3 := append(key3, 0, 0)
-	expectedText1 := "foo"
-	expectedText2 := "bar"
-	expectedText3 := "baz"
+	expectedText1 := []byte("foo")
+	expectedText2 := []byte("bar")
+	expectedText3 := []byte("baz")
 
 	var bufs []byte
-	e3 := NewAbstractEncoder(0, 0, expectedStateSize, expectedKeySize, expectedValSize, serialize.AsciiSerializer{})
+	e3 := NewBasicEncoder(0, 0, expectedStateSize, expectedKeySize, expectedValSize)
 	buf, err := e3.Encode(0, expectedState1, key1, expectedText1)
 	assert.NoError(t, err)
 	bufs = append(bufs, buf...)
@@ -132,7 +131,7 @@ func TestBasicEncoder_DecodeAll(t *testing.T) {
 	bufs = append(bufs, buf...)
 
 	k := 0
-	e3.DecodeAll(TopToBottom, bufs, func(seq int, s State, key []byte, text string, err error) {
+	e3.DecodeAll(TopToBottom, bufs, func(seq int, s State, key []byte, text []byte, err error) {
 		assert.Equal(t, k, seq)
 		assert.NoError(t, err)
 		switch k {
@@ -154,7 +153,7 @@ func TestBasicEncoder_DecodeAll(t *testing.T) {
 	})
 
 	k = 0
-	e3.DecodeAll(BottomToTop, bufs, func(seq int, s State, key []byte, text string, err error) {
+	e3.DecodeAll(BottomToTop, bufs, func(seq int, s State, key []byte, text []byte, err error) {
 		assert.Equal(t, 2-k, seq)
 		assert.NoError(t, err)
 		switch k {
@@ -189,12 +188,12 @@ func TestBasicEncoder_DecodeLastWord(t *testing.T) {
 	key2 := []byte("k2")
 	key3 := []byte("k3")
 	expectedKey3 := append(key3, 0, 0)
-	expectedText1 := "foo"
-	expectedText2 := "bar"
-	expectedText3 := "baz"
+	expectedText1 := []byte("foo")
+	expectedText2 := []byte("bar")
+	expectedText3 := []byte("baz")
 
 	var bufs []byte
-	e3 := NewAbstractEncoder[string](0, 0, expectedStateSize, expectedKeySize, expectedValSize, serialize.AsciiSerializer{})
+	e3 := NewBasicEncoder(0, 0, expectedStateSize, expectedKeySize, expectedValSize)
 	buf, err := e3.Encode(0, expectedState1, key1, expectedText1)
 	assert.NoError(t, err)
 	bufs = append(bufs, buf...)

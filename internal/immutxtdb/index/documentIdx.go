@@ -24,11 +24,12 @@ type DocIndex idx.Index[*[docIdxKeySize]byte, *model.BucketRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: DocumentRef)
 func NewDocumentIndex(indexDir, device string) (DocIndex, error) {
-	ser := serialize.ByteArray128Serializer{}
+	keySer := serialize.ByteArray128Serializer{}
+	valSer := gobSerializer[model.BucketRef]{}
 	enc := NewDocumentRefEncoder(0, docIdxStateSize, docIdxKeySize, docIdxDataSize)
-	return idx.NewBasicIndex(indexDir, docIdxQualifier, device, ser, enc, docIdxPageSize)
+	return idx.NewBasicIndex(indexDir, docIdxQualifier, device, keySer, valSer, nil, nil, enc, docIdxPageSize)
 }
 
-func NewDocumentRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder[*model.BucketRef] {
-	return idx.NewAbstractEncoder(docEncoderEuid, version, stateSize, keySize, valSize, gobSerializer[model.BucketRef]{})
+func NewDocumentRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder {
+	return idx.NewBasicEncoder(docEncoderEuid, version, stateSize, keySize, valSize)
 }

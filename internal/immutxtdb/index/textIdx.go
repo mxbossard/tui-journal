@@ -23,11 +23,12 @@ type TextIndex idx.Index[*[128]byte, *model.TextRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: TextRef)
 func NewTextIndex(indexDir, device string) (TextIndex, error) {
-	ser := serialize.ByteArray128Serializer{}
+	keySer := serialize.ByteArray128Serializer{}
+	valSer := gobSerializer[model.TextRef]{}
 	enc := NewTextRefRefEncoder(0, textIdxStateSize, textIdxKeySize, textIdxDataSize)
-	return idx.NewBasicIndex(indexDir, "text", device, ser, enc, textIdxPageSize)
+	return idx.NewBasicIndex(indexDir, "text", device, keySer, valSer, nil, nil, enc, textIdxPageSize)
 }
 
-func NewTextRefRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder[*model.TextRef] {
-	return idx.NewAbstractEncoder(textEncoderEuid, version, stateSize, keySize, valSize, gobSerializer[model.TextRef]{})
+func NewTextRefRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder {
+	return idx.NewBasicEncoder(textEncoderEuid, version, stateSize, keySize, valSize)
 }

@@ -32,7 +32,7 @@ func TestAsciiEncoder(t *testing.T) {
 	expectedState := BuildState(expectedStateSize, "abcdefg")
 	key := []byte("key")
 	expectedKey := append(key, 0)
-	expectedText := "foobarbaz"
+	expectedText := []byte("foobarbaz")
 
 	buf, err := e1.Encode(expectedSeq, expectedState, key, expectedText)
 	assert.NoError(t, err)
@@ -79,9 +79,9 @@ func TestAsciiEncoder(t *testing.T) {
 	expectedKey2 := append(key2, 0, 0)
 	key3 := []byte("k3")
 	expectedKey3 := append(key3, 0, 0)
-	expectedText1 := "foo"
-	expectedText2 := "bar"
-	expectedText3 := "baz"
+	expectedText1 := []byte("foo")
+	expectedText2 := []byte("bar")
+	expectedText3 := []byte("baz")
 
 	var bufs []byte
 	e3 := NewAsciiEncoder(0, expectedStateSize, expectedKeySize, expectedDataSize)
@@ -96,7 +96,7 @@ func TestAsciiEncoder(t *testing.T) {
 	bufs = append(bufs, buf...)
 
 	i := 0
-	e3.DecodeAll(TopToBottom, bufs, func(seq int, s State, key []byte, text string, err error) {
+	e3.DecodeAll(TopToBottom, bufs, func(seq int, s State, key []byte, text []byte, err error) {
 		assert.Equal(t, i, seq)
 		assert.NoError(t, err)
 		switch i {
@@ -118,7 +118,7 @@ func TestAsciiEncoder(t *testing.T) {
 	})
 
 	i = 0
-	e3.DecodeAll(BottomToTop, bufs, func(seq int, s State, key []byte, text string, err error) {
+	e3.DecodeAll(BottomToTop, bufs, func(seq int, s State, key []byte, text []byte, err error) {
 		assert.Equal(t, 2-i, seq)
 		assert.NoError(t, err)
 		switch i {

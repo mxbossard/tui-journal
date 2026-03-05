@@ -17,9 +17,10 @@ func TestBasicIndex_Add(t *testing.T) {
 	expectedPageSize := 10
 	expectedState := dummyState
 	expectedKeySize := 8
-	ser := serialize.AsciiSerializer{}
+	keySer := serialize.AsciiSerializer{}
+	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", ser, enc, expectedPageSize)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
@@ -34,9 +35,10 @@ func TestBasicIndex_Count(t *testing.T) {
 	expectedPageSize := 10
 	expectedState := dummyState
 	expectedKeySize := 8
-	ser := serialize.AsciiSerializer{}
+	keySer := serialize.AsciiSerializer{}
+	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", ser, enc, expectedPageSize)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
@@ -75,9 +77,10 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	expectedPageSize := 10
 	expectedState := dummyState
 	expectedKeySize := 16
-	ser := serialize.AsciiSerializer{}
+	keySer := serialize.AsciiSerializer{}
+	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", ser, enc, expectedPageSize)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 	err = bIdx.Add(expectedState, "k1", "foo")
@@ -139,9 +142,10 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	expectedPageSize := 10
 	expectedState := dummyState
 	expectedKeySize := 16
-	ser := serialize.AsciiSerializer{}
+	keySer := serialize.AsciiSerializer{}
+	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", ser, enc, expectedPageSize)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 	err = bIdx.Add(expectedState, "k1", "foo")

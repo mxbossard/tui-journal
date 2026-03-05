@@ -23,7 +23,8 @@ type BucketIndex idx.Index[idx.Void, string]
 // (KEY: Void, STATE, VAL: BUCKET_UID)
 func NewBucketIndex(indexDir, device string) (BucketIndex, error) {
 	enc := idx.NewAsciiEncoder(0, BucketIdxStateSize, bucketIdxKeySize, bucketIdxDataSize)
-	return idx.NewBasicIndex[idx.Void](indexDir, bucketIdxQualifier, device, nil, enc, bucketIdxPageSize)
+	valSer := serialize.AsciiSerializer{}
+	return idx.NewBasicIndex[idx.Void](indexDir, bucketIdxQualifier, device, nil, valSer, nil, nil, enc, bucketIdxPageSize)
 }
 
 type BucketIndex0 struct {
@@ -31,7 +32,7 @@ type BucketIndex0 struct {
 	*sync.Mutex
 	// FIXME: add a filelock
 
-	encoder        idx.IdxEncoder[idx.Void]
+	encoder        idx.IdxEncoder
 	keySerializer  serialize.AsciiSerializer
 	filepathes     []string
 	deviceIdxFiles []*filez.BlocsFile

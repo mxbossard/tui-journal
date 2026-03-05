@@ -2,8 +2,6 @@ package service
 
 import (
 	"bytes"
-	"crypto/sha512"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"iter"
@@ -117,19 +115,6 @@ func ForgeDumpName(device string, when time.Time) string {
 	return fmt.Sprintf("dump-%s-%d", device, when.Unix())
 }
 
-func RotatingHashString(salt []byte, pos uint32, s string) (*index.HashedBucketUid, error) {
-	hash := sha512.New()
-	hash.Write(salt)
-	err := binary.Write(hash, binary.BigEndian, pos)
-	if err != nil {
-		return nil, err
-	}
-	hash.Write([]byte(s))
-	hashed := hash.Sum(nil)
-	uid := index.HashedBucketUid(hashed[:index.LayerIdxKeySize])
-	return &uid, nil
-}
-
 func GetBlocWriter(device string) (*model.BlocRef, io.Writer, int, error) {
 	//blocs.GetLastBloc()
 	panic("not implemented yet")
@@ -155,11 +140,7 @@ func UseCaseDump0_Create(device, txt string) (*Dump, error) {
 	}
 
 	// 2- Create a bucket-time idx entry
-	bucketRhUid, err := RotatingHashString(name)
-	if err != nil {
-		return nil, err
-	}
-	idxService.bucketByTimeIdx.Add(dumpNewState, now, bucketRhUid[:])
+	idxService.bucketByTimeIdx.Add(dumpNewState, now, []byte(name))
 
 	// 3- Store the content
 	blocRef, blocWriter, pos, err := GetBlocWriter(device)
@@ -178,11 +159,8 @@ func UseCaseDump0_Create(device, txt string) (*Dump, error) {
 
 	// 4- Create a layer idx entry
 	rootLayerState := idx.BuildState(index.BucketIdxStateSize, "root")
-	rhBucketUid, err := RotatingHashString(name)
-	if err != nil {
-		return nil, err
-	}
-	idxService.layerIdx.Add(rootLayerState, rhBucketUid, layerRef)
+	hUid := index.HashedBucketUid([]byte(name))
+	idxService.layerIdx.Add(rootLayerState, &hUid, layerRef)
 
 	// rootLayer := model.Layer{
 	// 	Metadata: model.LayerMetadata{
