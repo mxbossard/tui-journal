@@ -35,6 +35,7 @@ var dummyState = BuildState(8, "dummy")
 
 type StateFilter func(s State, stop func()) bool
 type KeyFilter[K comparable] func(k K, s State, stop func()) bool
+type RotatingHasher func([]byte, uint32, []byte) ([]byte, error)
 
 func BuildState(size int, s string) State {
 	data := make([]byte, size)
@@ -148,6 +149,10 @@ func (i *basicIndex[K, V]) Add(s State, k K, v V) error {
 	bf := i.selectDeviceBlocFile(s, k)
 	bfName := bf.Name()
 	seq := i.seqs[bfName]
+
+	// FIXME: change v type to []byte in Encode() signature.
+	// FIXME: add a Value Serializer to encode value v into []byte.
+	// TODO: add 2 optionals RotatingHasher to hash key and value
 
 	entry, err := i.encoder.Encode(seq, s, key, v)
 	if err != nil {

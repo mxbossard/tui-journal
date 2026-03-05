@@ -87,13 +87,13 @@ func TestLayerIndex_PaginateAll(t *testing.T) {
 	require.True(t, page.Len() >= 4)
 
 	entries := page.Entries()
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "foo"), entries[0].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "foo"), entries[0].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file1", 10, Dump), entries[0].Val())
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "bar"), entries[1].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "bar"), entries[1].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file2", 20, Dump), entries[1].Val())
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "baz"), entries[2].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "baz"), entries[2].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file3", 30, Dump), entries[2].Val())
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "foo"), entries[3].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "foo"), entries[3].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file4", 40, Dump), entries[3].Val())
 
 	p2, errChan := bIdx.PaginateAll(idx.BottomToTop, 100)
@@ -108,13 +108,13 @@ func TestLayerIndex_PaginateAll(t *testing.T) {
 	require.True(t, page.Len() >= 4)
 
 	entries2 := page2.Entries()
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "foo"), entries2[0].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "foo"), entries2[0].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file4", 40, Dump), entries2[0].Val())
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "baz"), entries2[1].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "baz"), entries2[1].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file3", 30, Dump), entries2[1].Val())
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "bar"), entries2[2].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "bar"), entries2[2].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file2", 20, Dump), entries2[2].Val())
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "foo"), entries2[3].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "foo"), entries2[3].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file1", 10, Dump), entries2[3].Val())
 
 }
@@ -147,8 +147,8 @@ func TestLayerIndex_Paginate(t *testing.T) {
 	require.True(t, page.Len() >= 2)
 
 	entries := page.Entries()
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "foo"), entries[0].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "foo"), entries[0].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file4", 40, Dump), entries[0].Val())
-	assert.Equal(t, idx.FixedSizeStringKey(layerIdxKeySize, "foo"), entries[1].Key()[:])
+	assert.Equal(t, idx.FixedSizeStringKey(LayerIdxKeySize, "foo"), entries[1].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file1", 10, Dump), entries[1].Val())
 }

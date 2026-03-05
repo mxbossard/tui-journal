@@ -2,22 +2,31 @@ package service
 
 import (
 	"bytes"
+	"crypto/sha512"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"iter"
+	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/index"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
+	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/ztring"
 )
 
 // Aggregation of layers
-type Dump model.Bucket
+type Dump struct {
+	model.Bucket
+}
 
-type Doc model.Bucket
+type Doc struct {
+	model.Bucket
+}
 
 type Layer string
 
@@ -67,16 +76,58 @@ type idxService struct {
 	layerIdx        index.LayerIndex
 }
 
-func NewIdxService() *idxService {
-	return &idxService{}
+func NewIdxService(dir, device string) (*idxService, error) {
+	bucketIdxDir := filepath.Join(dir, "bucketIdx")
+	bucketByTimeIdxDir := filepath.Join(dir, "bucketByTimeIdx")
+	layerIdxDir := filepath.Join(dir, "layerIdx")
+
+	err := os.MkdirAll(bucketIdxDir, 0700)
+	if err != nil {
+		return nil, err
+	}
+	bucketIdx, err := index.NewBucketIndex(bucketIdxDir, device)
+	if err != nil {
+		return nil, err
+	}
+	err = os.MkdirAll(bucketByTimeIdxDir, 0700)
+	if err != nil {
+		return nil, err
+	}
+	bucketByTimeIdx, err := index.NewCreationTimeIndex(bucketByTimeIdxDir, device)
+	if err != nil {
+		return nil, err
+	}
+	err = os.MkdirAll(layerIdxDir, 0700)
+	if err != nil {
+		return nil, err
+	}
+	layerIdx, err := index.NewLayerIndex(layerIdxDir, device)
+	if err != nil {
+		return nil, err
+	}
+
+	return &idxService{
+		bucketIdx:       bucketIdx,
+		bucketByTimeIdx: bucketByTimeIdx,
+		layerIdx:        layerIdx,
+	}, nil
 }
 
 func ForgeDumpName(device string, when time.Time) string {
 	return fmt.Sprintf("dump-%s-%d", device, when.Unix())
 }
 
-func RotatingHashString(s string) (*index.HashedBucketUid, error) {
-	panic("not implemented yet")
+func RotatingHashString(salt []byte, pos uint32, s string) (*index.HashedBucketUid, error) {
+	hash := sha512.New()
+	hash.Write(salt)
+	err := binary.Write(hash, binary.BigEndian, pos)
+	if err != nil {
+		return nil, err
+	}
+	hash.Write([]byte(s))
+	hashed := hash.Sum(nil)
+	uid := index.HashedBucketUid(hashed[:index.LayerIdxKeySize])
+	return &uid, nil
 }
 
 func GetBlocWriter(device string) (*model.BlocRef, io.Writer, int, error) {
@@ -87,14 +138,18 @@ func GetBlocWriter(device string) (*model.BlocRef, io.Writer, int, error) {
 // ------------- Dumps ---------------
 
 func UseCaseDump0_Create(device, txt string) (*Dump, error) {
-	idxService := NewIdxService()
+	tmpDir := filez.MkTempOrPanic("UseCaseDump0_Create")
+	idxService, err := NewIdxService(tmpDir, device)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 
 	// 0- Forge dump name
 	name := ForgeDumpName(device, now)
 
 	// 1- Create a bucket
-	err := idxService.bucketIdx.Add(dumpNewState, nil, name)
+	err = idxService.bucketIdx.Add(dumpNewState, nil, name)
 	if err != nil {
 		return nil, err
 	}
@@ -143,13 +198,15 @@ func UseCaseDump0_Create(device, txt string) (*Dump, error) {
 	}
 
 	d := &Dump{
-		Uid: model.BucketUid(name),
-		Metadata: model.BucketMetadata{
-			Created: now,
-			Updated: now,
-			Labels:  nil,
+		Bucket: model.Bucket{
+			Uid: model.BucketUid(name),
+			Metadata: model.BucketMetadata{
+				Created: now,
+				Updated: now,
+				Labels:  nil,
+			},
+			LayerRefIt: layerRefIt,
 		},
-		LayerRefIt: layerRefIt,
 	}
 	return d, nil
 }
@@ -166,7 +223,12 @@ func ConsumeErrorIfAny(errChan chan error) (err error) {
 // Must return a list of dumps able to lazy load their layers.
 func UseCaseDump1_ListLast(count int) ([]*Dump, error) {
 	// 1- Browse bucket-time idx to find last dumps ref
-	idxService := NewIdxService()
+	tmpDir := filez.MkTempOrPanic("UseCaseDump0_Create")
+	device := "pif"
+	idxService, err := NewIdxService(tmpDir, device)
+	if err != nil {
+		return nil, err
+	}
 	dumpStateFilter := func(s idx.State, stop func()) bool {
 		return bytes.Equal(s[0:3], dumpState[0:3])
 	}
@@ -240,8 +302,10 @@ BucketLoop:
 		// FIXME: do not have metadata here ? Where are stored metadatas ? Do we need Metadata before projecting the document ?
 		_ = layerRefs
 		d := &Dump{
-			Uid:        model.BucketUid((rhUid[:])),
-			LayerRefIt: layerRefIt,
+			Bucket: model.Bucket{
+				Uid:        model.BucketUid((rhUid[:])),
+				LayerRefIt: layerRefIt,
+			},
 		}
 		dumps = append(dumps, d)
 	}

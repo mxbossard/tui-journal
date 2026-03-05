@@ -12,18 +12,18 @@ import (
 )
 
 const (
-	layerIdxStateSize = 8
-	layerIdxKeySize   = 128
-	layerIdxDataSize  = 200
-	layerIdxPageSize  = 10
-	layerIdxQualifier = "layer"
+	LayerIdxStateSize = 8
+	LayerIdxKeySize   = 128
+	LayerIdxDataSize  = 200
+	LayerIdxPageSize  = 10
+	LayerIdxQualifier = "layer"
 )
 
 var (
 	layerEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("layer000")))
 )
 
-type HashedBucketUid [layerIdxKeySize]byte
+type HashedBucketUid [LayerIdxKeySize]byte
 
 func stringToBucketUid(uid string) *HashedBucketUid {
 	var a HashedBucketUid
@@ -55,8 +55,8 @@ type LayerIndex idx.Index[*HashedBucketUid, *model.LayerRef]
 // (KEY: BUCKET_UID, STATE, VAL: LayerRef)
 func NewLayerIndex(indexDir, device string) (LayerIndex, error) {
 	ser := BucketUidSerializer{}
-	enc := NewLayerRefEncoder(0, layerIdxStateSize, layerIdxKeySize, layerIdxDataSize)
-	return idx.NewBasicIndex(indexDir, layerIdxQualifier, device, ser, enc, layerIdxPageSize)
+	enc := NewLayerRefEncoder(0, LayerIdxStateSize, LayerIdxKeySize, LayerIdxDataSize)
+	return idx.NewBasicIndex(indexDir, LayerIdxQualifier, device, ser, enc, LayerIdxPageSize)
 }
 
 type layerRefSerializer struct {
