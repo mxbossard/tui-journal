@@ -25,7 +25,7 @@ var (
 
 type HashedBucketUid [LayerIdxKeySize]byte
 
-func stringToBucketUid(uid string) *HashedBucketUid {
+func StringToBucketUid(uid string) *HashedBucketUid {
 	var a HashedBucketUid
 	copy(a[:], []byte(uid))
 	return &a
@@ -53,12 +53,12 @@ func (s BucketUidSerializer) Deserialize(i []byte) (*HashedBucketUid, error) {
 type LayerIndex idx.Index[*HashedBucketUid, *model.LayerRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: LayerRef)
-func NewLayerIndex(indexDir, device string) (LayerIndex, error) {
+func NewLayerIndex(indexDir, device, salt string) (LayerIndex, error) {
 	keySer := BucketUidSerializer{}
 	// keySer := serialize.AsciiSerializer{}
 	valSer := gobSerializer[model.LayerRef]{}
 	enc := NewLayerRefEncoder(0, LayerIdxStateSize, LayerIdxKeySize, LayerIdxDataSize)
-	return idx.NewBasicIndex(indexDir, LayerIdxQualifier, device, keySer, valSer, RotatingHasher, nil, enc, LayerIdxPageSize)
+	return idx.NewBasicIndex(indexDir, LayerIdxQualifier, device, keySer, valSer, RotatingHasher([]byte(salt)), nil, enc, LayerIdxPageSize)
 }
 
 type layerRefSerializer struct {

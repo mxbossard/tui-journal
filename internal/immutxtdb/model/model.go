@@ -85,10 +85,10 @@ type Bucket struct {
 	Uid        BucketUid
 	Metadata   BucketMetadata
 	LayerRefIt iter.Seq[*LayerRef]
-	layers     []*Layer
+	//layers     []*Layer
 }
 
-func (b Bucket) Project() (string, error) {
+func (b Bucket) Project() (txt string, err error) {
 	panic("not implemented yet")
 }
 

@@ -74,7 +74,7 @@ func TestBucketIndex_PaginateAll(t *testing.T) {
 	err = bIdx.Add(Document, nil, "foo")
 	assert.NoError(t, err)
 
-	p, errChan := bIdx.PaginateAll(idx.TopToBottom, 100)
+	p, errChan := bIdx.PaginateAll(idx.TopToBottom)
 	require.NotNil(t, p)
 	require.NotNil(t, errChan)
 
@@ -91,7 +91,7 @@ func TestBucketIndex_PaginateAll(t *testing.T) {
 	assert.Equal(t, "baz", entries[2].Val())
 	assert.Equal(t, "foo", entries[3].Val())
 
-	p2, errChan := bIdx.PaginateAll(idx.BottomToTop, 100)
+	p2, errChan := bIdx.PaginateAll(idx.BottomToTop)
 	require.NotNil(t, p2)
 	require.NotNil(t, errChan)
 

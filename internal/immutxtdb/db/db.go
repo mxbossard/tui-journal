@@ -23,7 +23,7 @@ func RotatingHashString(s string) *index.HashedBucketUid {
 
 func (d *DB) Bucket(uid string) (*model.Bucket, error) {
 	rhUid := RotatingHashString(uid)
-	p, errChan := d.layerIdx.Paginate(rhUid, idx.BottomToTop, 100)
+	p, errChan := d.layerIdx.Paginate(rhUid, idx.BottomToTop)
 
 	var layers []*model.LayerRef
 	for page, ok, err := p.Next(); ok; {

@@ -24,10 +24,10 @@ type RotatingHash []byte
 type DocByTimeIndex idx.Index[time.Time, []byte]
 
 // PLAIN(KEY: TIME, STATE, VAL: RH(BUCKET_UID))
-func NewCreationTimeIndex(indexDir, device string) (DocByTimeIndex, error) {
+func NewCreationTimeIndex(indexDir, device, salt string) (DocByTimeIndex, error) {
 	keySer := serialize.TimeSerializer{}
 	valSer := serialize.ByteSliceSerializer{}
 	// enc := NewDocumentRefEncoder(0, timeIdxStateSize, timeIdxKeySize, timeIdxDataSize)
 	enc := idx.NewByteSliceEncoder(0, timeIdxStateSize, timeIdxKeySize, timeIdxDataSize)
-	return idx.NewBasicIndex(indexDir, creationTimeIdxQualifier, device, keySer, valSer, nil, RotatingHasher, enc, timeIdxPageSize)
+	return idx.NewBasicIndex(indexDir, creationTimeIdxQualifier, device, keySer, valSer, nil, RotatingHasher([]byte(salt)), enc, timeIdxPageSize)
 }

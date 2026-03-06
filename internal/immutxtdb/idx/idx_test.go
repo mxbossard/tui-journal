@@ -92,7 +92,7 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	err = bIdx.Add(expectedState, "k1", "pif")
 	assert.NoError(t, err)
 
-	p, errChan := bIdx.PaginateAll(TopToBottom, 100)
+	p, errChan := bIdx.PaginateAll(TopToBottom)
 	require.NotNil(t, p)
 	require.NotNil(t, errChan)
 
@@ -113,7 +113,7 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	assert.Equal(t, "k1", entries[3].Key())
 	assert.Equal(t, "pif", entries[3].Val())
 
-	p2, errChan := bIdx.PaginateAll(BottomToTop, 100)
+	p2, errChan := bIdx.PaginateAll(BottomToTop)
 	require.NotNil(t, p2)
 	require.NotNil(t, errChan)
 
@@ -157,7 +157,7 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	err = bIdx.Add(expectedState, "k1", "pif")
 	assert.NoError(t, err)
 
-	pk1, errChan := bIdx.Paginate("k1", TopToBottom, 100)
+	pk1, errChan := bIdx.Paginate("k1", TopToBottom)
 	require.NotNil(t, pk1)
 	require.NotNil(t, errChan)
 
@@ -174,7 +174,7 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	assert.Equal(t, "k1", entries[1].Key())
 	assert.Equal(t, "pif", entries[1].Val())
 
-	pk2, errChan := bIdx.Paginate("k1", BottomToTop, 100)
+	pk2, errChan := bIdx.Paginate("k1", BottomToTop)
 	require.NotNil(t, pk2)
 	require.NotNil(t, errChan)
 
@@ -191,7 +191,7 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	assert.Equal(t, "k1", entries2[1].Key())
 	assert.Equal(t, "foo", entries2[1].Val())
 
-	pk3, errChan := bIdx.Paginate("k3", BottomToTop, 100)
+	pk3, errChan := bIdx.Paginate("k3", BottomToTop)
 	require.NotNil(t, pk3)
 	require.NotNil(t, errChan)
 

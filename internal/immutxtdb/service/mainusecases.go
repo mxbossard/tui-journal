@@ -13,6 +13,7 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/index"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
+	"github.com/mxbossard/utilz/errorz"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/ztring"
 )
@@ -57,6 +58,11 @@ type Topic string
 
 */
 
+const (
+	DataBlocCapacity      = 256
+	DataBlocThresholdSize = 100
+)
+
 var (
 	dump1 = ztring.LoremIpsumWords(10)
 	dump2 = ztring.LoremIpsumWords(20)
@@ -74,7 +80,7 @@ type idxService struct {
 	layerIdx        index.LayerIndex
 }
 
-func NewIdxService(dir, device string) (*idxService, error) {
+func NewIdxService(dir, device, salt string) (*idxService, error) {
 	bucketIdxDir := filepath.Join(dir, "bucketIdx")
 	bucketByTimeIdxDir := filepath.Join(dir, "bucketByTimeIdx")
 	layerIdxDir := filepath.Join(dir, "layerIdx")
@@ -91,7 +97,7 @@ func NewIdxService(dir, device string) (*idxService, error) {
 	if err != nil {
 		return nil, err
 	}
-	bucketByTimeIdx, err := index.NewCreationTimeIndex(bucketByTimeIdxDir, device)
+	bucketByTimeIdx, err := index.NewCreationTimeIndex(bucketByTimeIdxDir, device, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +105,7 @@ func NewIdxService(dir, device string) (*idxService, error) {
 	if err != nil {
 		return nil, err
 	}
-	layerIdx, err := index.NewLayerIndex(layerIdxDir, device)
+	layerIdx, err := index.NewLayerIndex(layerIdxDir, device, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -115,16 +121,64 @@ func ForgeDumpName(device string, when time.Time) string {
 	return fmt.Sprintf("dump-%s-%d", device, when.Unix())
 }
 
-func GetBlocWriter(device string) (*model.BlocRef, io.Writer, int, error) {
-	//blocs.GetLastBloc()
-	panic("not implemented yet")
+func GetBlocReader(ref *model.BlocRef) (*filez.Bloc, error) {
+	bf, err := filez.OpenBlocsFile(ref.BlocsFilepath)
+	if err != nil {
+		return nil, err
+	}
+	bloc, err := bf.Get(ref.BlocId)
+	return bloc, err
+}
+
+// FIXME: NEED to synchronize blocs writes & reads in a dedicated service (which may cache BlocsFile).
+func GetBlocWriter(dir, device string) (*filez.BlocsFile, error) {
+	qualifier := "data"
+	dir = filepath.Join(dir, qualifier)
+	err := os.MkdirAll(dir, 0700)
+	if err != nil {
+		return nil, err
+	}
+	firstDeviceFilepath := filepath.Join(dir, fmt.Sprintf("%s-%s-001.idx", qualifier, device))
+	dbf1, err := filez.NewBlocsFile(firstDeviceFilepath, DataBlocCapacity, DataBlocThresholdSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return dbf1, nil
+}
+
+func readLayerDiff(ref *model.LayerRef) (string, error) {
+	bloc, err := GetBlocReader(ref.BlocRef)
+	if err != nil {
+		return "", err
+	}
+	b := make([]byte, ref.Pos+ref.Len)
+	n, err := bloc.Read(b)
+	if err != nil {
+		return "", err
+	}
+	txt := string(b[ref.Pos:n])
+	fmt.Printf("read layer diff: [%s] from pos: %d of len: %d\n", txt, ref.Pos, n-ref.Pos)
+	return txt, nil
+}
+
+func project(b *model.Bucket) (txt string, err error) {
+	// FIXME: implements diff aggregation
+	for ref := range b.LayerRefIt {
+		txt, err = readLayerDiff(ref)
+		if err != nil && err != io.EOF {
+			return
+		}
+	}
+	return txt, nil
+	// panic("not implemented yet")
 }
 
 // ------------- Dumps ---------------
 
-func UseCaseDump0_Create(device, txt string) (*Dump, error) {
+func UseCaseDump0_Create(salt, device, txt string) (*Dump, error) {
 	tmpDir := filez.MkTempOrPanic("UseCaseDump0_Create")
-	idxService, err := NewIdxService(tmpDir, device)
+	idxService, err := NewIdxService(tmpDir, device, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -133,34 +187,49 @@ func UseCaseDump0_Create(device, txt string) (*Dump, error) {
 	// 0- Forge dump name
 	name := ForgeDumpName(device, now)
 
-	// 1- Create a bucket
+	// FIXME: 1- Check if bucket already exists !
+
+	// 2- Create a bucket
 	err = idxService.bucketIdx.Add(dumpNewState, nil, name)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2- Create a bucket-time idx entry
+	// 3- Create a bucket-time idx entry
 	idxService.bucketByTimeIdx.Add(dumpNewState, now, []byte(name))
 
-	// 3- Store the content
-	blocRef, blocWriter, pos, err := GetBlocWriter(device)
+	// 4- Store the content
+	blocWriter, err := GetBlocWriter(tmpDir, device)
 	if err != nil {
 		return nil, err
 	}
-	n, err := blocWriter.Write([]byte(txt))
+	data := []byte(txt)
+	n, err := blocWriter.Write(data)
 	if err != nil {
 		return nil, err
 	}
-	layerRef := &model.LayerRef{
-		BlocRef: blocRef,
+	bloc, err := blocWriter.GetLastBloc()
+	if err != nil {
+		return nil, err
+	}
+
+	blocRef := model.BlocRef{
+		BlocsFilepath: blocWriter.Name(),
+		BlocId:        bloc.Uid.Id,
+	}
+
+	pos := bloc.Len() - n
+	rootLayerRef := &model.LayerRef{
+		BlocRef: &blocRef,
 		Pos:     pos,
 		Len:     n,
 	}
+	fmt.Printf("Written data: %v of len: %d at pos: %d\n", data, n, pos)
 
-	// 4- Create a layer idx entry
+	// 5- Create a layer idx entry
 	rootLayerState := idx.BuildState(index.BucketIdxStateSize, "root")
-	hUid := index.HashedBucketUid([]byte(name))
-	idxService.layerIdx.Add(rootLayerState, &hUid, layerRef)
+	hUid := index.HashedBucketUid(*index.StringToBucketUid(name))
+	idxService.layerIdx.Add(rootLayerState, &hUid, rootLayerRef)
 
 	// rootLayer := model.Layer{
 	// 	Metadata: model.LayerMetadata{
@@ -171,10 +240,12 @@ func UseCaseDump0_Create(device, txt string) (*Dump, error) {
 	// 	Snapshoted: true, // First layer snapshoted by definition
 	// }
 
+	// 6- Forge the root layer iterator
 	var layerRefIt iter.Seq[*model.LayerRef] = func(yield func(*model.LayerRef) bool) {
-		yield(layerRef)
+		yield(rootLayerRef)
 	}
 
+	// 7- Build the entity to return
 	d := &Dump{
 		Bucket: model.Bucket{
 			Uid: model.BucketUid(name),
@@ -189,37 +260,30 @@ func UseCaseDump0_Create(device, txt string) (*Dump, error) {
 	return d, nil
 }
 
-func ConsumeErrorIfAny(errChan chan error) (err error) {
-	// Non blocking chan consumption
-	select {
-	case err = <-errChan:
-	default:
-	}
-	return
-}
-
 // Must return a list of dumps able to lazy load their layers.
-func UseCaseDump1_ListLast(count int) ([]*Dump, error) {
+func UseCaseDump1_ListLast(salt string, count int) ([]*Dump, error) {
 	// 1- Browse bucket-time idx to find last dumps ref
 	tmpDir := filez.MkTempOrPanic("UseCaseDump0_Create")
 	device := "pif"
-	idxService, err := NewIdxService(tmpDir, device)
+	idxService, err := NewIdxService(tmpDir, device, salt)
 	if err != nil {
 		return nil, err
 	}
-	dumpStateFilter := func(s idx.State, stop func()) bool {
-		return bytes.Equal(s[0:3], dumpState[0:3])
+	dumpStateFilter := func(s idx.State) (bool, bool) {
+		return bytes.Equal(s[0:3], dumpState[0:3]), false
 	}
+
+	// 2- Find last buckets layers in bucketByTimeIdx
 	k := 0
 	var bucketRhUids []*index.HashedBucketUid
-	paginer, errChan := idxService.bucketByTimeIdx.FilterAll(idx.BottomToTop, 10, dumpStateFilter, nil)
+	paginer, errChan := idxService.bucketByTimeIdx.FilterAll(idx.BottomToTop, dumpStateFilter, nil)
 BucketLoop:
 	for err, page := range paginer.All() {
 		// FIXME: what is this error ?
 		if err != nil {
 			return nil, err
 		}
-		if err := ConsumeErrorIfAny(errChan); err != nil {
+		if err := errorz.ChanCollect(errChan); err.GotError() {
 			return nil, err
 		}
 		// FIXME what is this pos ? is it seq ?
@@ -235,32 +299,34 @@ BucketLoop:
 		}
 	}
 
-	layerStateFilter := func(s idx.State, stop func()) bool {
-		return bytes.Equal(s[0:3], layerState[0:3])
+	// 3- Find corresponding layers in layerIdx
+	layerStateFilter := func(s idx.State) (bool, bool) {
+		return bytes.Equal(s[0:3], layerState[0:3]), false
 	}
 	var snapshotedLayersRhUids []*index.HashedBucketUid
-	layerFilter := func(k *index.HashedBucketUid, s idx.State, stop func()) bool {
-		if slices.Contains(bucketRhUids, k) {
-			if slices.Contains(snapshotedLayersRhUids, k) {
-				return false
+	layerKeyFilter := func(k []byte, s idx.State) (bool, bool) {
+		hashedUid := index.HashedBucketUid(k)
+		if slices.Contains(bucketRhUids, &hashedUid) {
+			if slices.Contains(snapshotedLayersRhUids, &hashedUid) {
+				return false, false
 			}
 			if bytes.Equal(s, layerSnapshotState) {
 				// Layer is a snapshot
-				snapshotedLayersRhUids = append(snapshotedLayersRhUids, k)
+				snapshotedLayersRhUids = append(snapshotedLayersRhUids, &hashedUid)
 			}
-			return true
+			return true, false
 		}
-		return false
+		return false, false
 	}
 	var dumps []*Dump
 	var layersByRhUid map[[128]byte][]*model.LayerRef
-	paginer2, errChan := idxService.layerIdx.FilterAll(idx.BottomToTop, 10, layerStateFilter, layerFilter)
+	paginer2, errChan := idxService.layerIdx.FilterAll(idx.BottomToTop, layerStateFilter, layerKeyFilter)
 	for err, page := range paginer2.All() {
 		// FIXME: what is this error ?
 		if err != nil {
 			return nil, err
 		}
-		if err := ConsumeErrorIfAny(errChan); err != nil {
+		if err := errorz.ChanCollect(errChan); err.GotError() {
 			return nil, err
 		}
 		// FIXME what is this pos ? is it seq ?
@@ -288,7 +354,8 @@ BucketLoop:
 		dumps = append(dumps, d)
 	}
 
-	panic("not implemented yet")
+	return dumps, nil
+	// panic("not implemented yet")
 }
 
 func UseCaseDump2_Get(d Dump) (string, error) {
