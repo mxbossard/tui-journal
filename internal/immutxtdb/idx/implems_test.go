@@ -96,7 +96,7 @@ func TestAsciiEncoder(t *testing.T) {
 	bufs = append(bufs, buf...)
 
 	i := 0
-	e3.DecodeAll(TopToBottom, bufs, func(seq int, s State, key []byte, text []byte, err error) {
+	e3.DecodeAll(TopToBottom, bufs, func(seq int, s State, key []byte, text []byte, err error) bool {
 		assert.Equal(t, i, seq)
 		assert.NoError(t, err)
 		switch i {
@@ -115,10 +115,11 @@ func TestAsciiEncoder(t *testing.T) {
 
 		}
 		i++
+		return true
 	})
 
 	i = 0
-	e3.DecodeAll(BottomToTop, bufs, func(seq int, s State, key []byte, text []byte, err error) {
+	e3.DecodeAll(BottomToTop, bufs, func(seq int, s State, key []byte, text []byte, err error) bool {
 		assert.Equal(t, 2-i, seq)
 		assert.NoError(t, err)
 		switch i {
@@ -137,6 +138,7 @@ func TestAsciiEncoder(t *testing.T) {
 
 		}
 		i++
+		return true
 	})
 
 	// Decode last Word

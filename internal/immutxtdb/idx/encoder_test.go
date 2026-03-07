@@ -131,7 +131,7 @@ func TestBasicEncoder_DecodeAll(t *testing.T) {
 	bufs = append(bufs, buf...)
 
 	k := 0
-	e3.DecodeAll(TopToBottom, bufs, func(seq int, s State, key []byte, text []byte, err error) {
+	e3.DecodeAll(TopToBottom, bufs, func(seq int, s State, key []byte, text []byte, err error) bool {
 		assert.Equal(t, k, seq)
 		assert.NoError(t, err)
 		switch k {
@@ -150,10 +150,11 @@ func TestBasicEncoder_DecodeAll(t *testing.T) {
 
 		}
 		k++
+		return true
 	})
 
 	k = 0
-	e3.DecodeAll(BottomToTop, bufs, func(seq int, s State, key []byte, text []byte, err error) {
+	e3.DecodeAll(BottomToTop, bufs, func(seq int, s State, key []byte, text []byte, err error) bool {
 		assert.Equal(t, 2-k, seq)
 		assert.NoError(t, err)
 		switch k {
@@ -172,6 +173,7 @@ func TestBasicEncoder_DecodeAll(t *testing.T) {
 
 		}
 		k++
+		return true
 	})
 }
 

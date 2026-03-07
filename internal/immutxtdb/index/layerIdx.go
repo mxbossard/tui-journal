@@ -58,7 +58,7 @@ func NewLayerIndex(indexDir, device, salt string) (LayerIndex, error) {
 	// keySer := serialize.AsciiSerializer{}
 	valSer := gobSerializer[model.LayerRef]{}
 	enc := NewLayerRefEncoder(0, LayerIdxStateSize, LayerIdxKeySize, LayerIdxDataSize)
-	return idx.NewBasicIndex(indexDir, LayerIdxQualifier, device, keySer, valSer, RotatingHasher([]byte(salt)), nil, enc, LayerIdxPageSize)
+	return idx.NewBasicIndex(indexDir, LayerIdxQualifier, device, keySer, valSer, RotatingHasher([]byte(salt), LayerIdxKeySize), nil, enc, LayerIdxPageSize)
 }
 
 type layerRefSerializer struct {

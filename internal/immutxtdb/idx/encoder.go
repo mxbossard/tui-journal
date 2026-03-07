@@ -24,7 +24,7 @@ type IdxEncoder interface {
 	Decode([]byte) (seq int, s State, key []byte, val []byte, err error)
 	// Decode last word in supplied byte slice.
 	DecodeLastWord([]byte) (seq int, s State, key []byte, val []byte, err error)
-	DecodeAll(Order, []byte, func(seq int, s State, key []byte, val []byte, err error))
+	DecodeAll(Order, []byte, func(seq int, s State, key []byte, val []byte, err error) bool)
 }
 
 type basicIdxEncoder struct {
@@ -280,19 +280,23 @@ func (e *basicIdxEncoder) DecodeLastWord(buf []byte) (int, State, []byte, []byte
 	return e.Decode(buf[lastWordStart:])
 }
 
-func (e basicIdxEncoder) DecodeAll(order Order, buf []byte, push func(int, State, []byte, []byte, error)) {
+func (e basicIdxEncoder) DecodeAll(order Order, buf []byte, push func(int, State, []byte, []byte, error) bool) {
 	wordSize := e.WordSize()
 	if order == TopToBottom {
 		for k := 0; k < len(buf); k += wordSize {
 			seq, state, key, val, err := e.Decode(buf[k:])
 			push(seq, state, key, val, err)
 		}
-	} else {
+	} else if order == BottomToTop {
 		wordCount := len(buf) / wordSize
 		for k := (wordCount - 1) * wordSize; k >= 0; k -= wordSize {
 			seq, state, key, val, err := e.Decode(buf[k : k+wordSize])
-			push(seq, state, key, val, err)
+			if !push(seq, state, key, val, err) {
+				// Stop iterating
+				break
+			}
 		}
-
+	} else {
+		panic(fmt.Sprintf("%s ordering not supported", order))
 	}
 }

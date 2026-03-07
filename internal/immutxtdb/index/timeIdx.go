@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	timeIdxStateSize         = 8
-	timeIdxKeySize           = 32
-	timeIdxDataSize          = 200
-	timeIdxPageSize          = 10
-	creationTimeIdxQualifier = "creationTime"
+	TimeIdxStateSize         = 8
+	TimeIdxKeySize           = 32
+	TimeIdxDataSize          = 200
+	TimeIdxPageSize          = 10
+	CreationTimeIdxQualifier = "creationTime"
 )
 
 var (
@@ -28,6 +28,6 @@ func NewCreationTimeIndex(indexDir, device, salt string) (DocByTimeIndex, error)
 	keySer := serialize.TimeSerializer{}
 	valSer := serialize.ByteSliceSerializer{}
 	// enc := NewDocumentRefEncoder(0, timeIdxStateSize, timeIdxKeySize, timeIdxDataSize)
-	enc := idx.NewByteSliceEncoder(0, timeIdxStateSize, timeIdxKeySize, timeIdxDataSize)
-	return idx.NewBasicIndex(indexDir, creationTimeIdxQualifier, device, keySer, valSer, nil, RotatingHasher([]byte(salt)), enc, timeIdxPageSize)
+	enc := idx.NewByteSliceEncoder(0, TimeIdxStateSize, TimeIdxKeySize, TimeIdxDataSize)
+	return idx.NewBasicIndex(indexDir, CreationTimeIdxQualifier, device, keySer, valSer, nil, RotatingHasher([]byte(salt), TimeIdxKeySize), enc, TimeIdxPageSize)
 }
