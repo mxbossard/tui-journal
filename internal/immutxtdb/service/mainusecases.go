@@ -7,7 +7,6 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
@@ -71,6 +70,7 @@ var (
 	dumpState          = idx.BuildState(index.BucketIdxStateSize, "dmp")
 	dumpNewState       = idx.BuildState(index.BucketIdxStateSize, "dmpNew")
 	layerState         = idx.BuildState(index.BucketIdxStateSize, "lyr")
+	rootLayerState     = idx.BuildState(index.LayerIdxStateSize, "lyrRoot")
 	layerSnapshotState = idx.BuildState(index.BucketIdxStateSize, "lyrSnap")
 )
 
@@ -158,7 +158,7 @@ func readLayerDiff(ref *model.LayerRef) (string, error) {
 		return "", err
 	}
 	txt := string(b[ref.Pos:n])
-	fmt.Printf("read layer diff: [%s] from pos: %d of len: %d\n", txt, ref.Pos, n-ref.Pos)
+	// fmt.Printf("read layer diff: [%s] from pos: %d of len: %d\n", txt, ref.Pos, n-ref.Pos)
 	return txt, nil
 }
 
@@ -176,9 +176,8 @@ func project(b *model.Bucket) (txt string, err error) {
 
 // ------------- Dumps ---------------
 
-func UseCaseDump0_Create(salt, device, txt string) (*Dump, error) {
-	tmpDir := filez.MkTempOrPanic("UseCaseDump0_Create")
-	idxService, err := NewIdxService(tmpDir, device, salt)
+func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
+	idxService, err := NewIdxService(dir, device, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +198,7 @@ func UseCaseDump0_Create(salt, device, txt string) (*Dump, error) {
 	idxService.bucketByTimeIdx.Add(dumpNewState, now, []byte(name))
 
 	// 4- Store the content
-	blocWriter, err := GetBlocWriter(tmpDir, device)
+	blocWriter, err := GetBlocWriter(dir, device)
 	if err != nil {
 		return nil, err
 	}
@@ -224,11 +223,10 @@ func UseCaseDump0_Create(salt, device, txt string) (*Dump, error) {
 		Pos:     pos,
 		Len:     n,
 	}
-	fmt.Printf("Written data: %v of len: %d at pos: %d\n", data, n, pos)
+	// fmt.Printf("Written data: %v of len: %d at pos: %d\n", data, n, pos)
 
 	// 5- Create a layer idx entry
-	rootLayerState := idx.BuildState(index.BucketIdxStateSize, "root")
-	hUid := index.HashedBucketUid(*index.StringToBucketUid(name))
+	hUid := index.HashedBucketUid(index.StringToBucketUid(name))
 	idxService.layerIdx.Add(rootLayerState, &hUid, rootLayerRef)
 
 	// rootLayer := model.Layer{
@@ -260,22 +258,30 @@ func UseCaseDump0_Create(salt, device, txt string) (*Dump, error) {
 	return d, nil
 }
 
+func ByteSliceInArray(a [][]byte, s []byte) bool {
+	for _, slice := range a {
+		if bytes.Equal(s, slice) {
+			return true
+		}
+	}
+	return false
+}
+
 // Must return a list of dumps able to lazy load their layers.
-func UseCaseDump1_ListLast(salt string, count int) ([]*Dump, error) {
+func UseCaseDump1_ListLast(dir, device, salt string, count int) ([]*Dump, error) {
 	// 1- Browse bucket-time idx to find last dumps ref
-	tmpDir := filez.MkTempOrPanic("UseCaseDump0_Create")
-	device := "pif"
-	idxService, err := NewIdxService(tmpDir, device, salt)
+	idxService, err := NewIdxService(dir, device, salt)
 	if err != nil {
 		return nil, err
 	}
 	dumpStateFilter := func(s idx.State) (bool, bool) {
-		return bytes.Equal(s[0:3], dumpState[0:3]), false
+		fmt.Printf("dumpStateFilter s: %v / dumpState: %v\n", s[0:3], dumpState[0:3])
+		return bytes.Equal(s[0:3], dumpState[0:3]), true
 	}
 
 	// 2- Find last buckets layers in bucketByTimeIdx
 	k := 0
-	var bucketRhUids []*index.HashedBucketUid
+	var bucketRhUids [][]byte
 	paginer, errChan := idxService.bucketByTimeIdx.FilterAll(idx.BottomToTop, dumpStateFilter, nil)
 BucketLoop:
 	for err, page := range paginer.All() {
@@ -290,34 +296,44 @@ BucketLoop:
 		for pos, entry := range page.All() {
 			_ = pos
 			if k == count {
+				// FIXME: must break only if count DISTINCT bucket uids reached.
 				break BucketLoop
 			}
+			fmt.Printf("ranging over bucketByTimeIdx, hUid: %v\n", entry.Val())
 			// var array [128]byte
 			// copy(array[:], entry.Val())
-			array := index.HashedBucketUid(entry.Val())
-			bucketRhUids = append(bucketRhUids, &array)
+			// array := index.ByteSliceToBucketUid()
+			bucketRhUids = append(bucketRhUids, entry.Val())
+			k++
 		}
 	}
 
+	fmt.Printf("found last hashed bucket uids: %v\n", bucketRhUids)
+
 	// 3- Find corresponding layers in layerIdx
 	layerStateFilter := func(s idx.State) (bool, bool) {
-		return bytes.Equal(s[0:3], layerState[0:3]), false
+		fmt.Printf("layerStateFilter s: %v / layerState: %v\n", s[0:3], layerState[0:3])
+		return bytes.Equal(s[0:3], layerState[0:3]), true
 	}
-	var snapshotedLayersRhUids []*index.HashedBucketUid
+	var snapshotedLayersRhUids [][]byte
 	layerKeyFilter := func(k []byte, s idx.State) (bool, bool) {
-		hashedUid := index.HashedBucketUid(k)
-		if slices.Contains(bucketRhUids, &hashedUid) {
-			if slices.Contains(snapshotedLayersRhUids, &hashedUid) {
-				return false, false
+		// hashedUid := index.HashedBucketUid(k)
+		fmt.Printf("layerKeyFilter k: %v / state: %v / bucketRhUids: %v\n", k, s, bucketRhUids)
+		for _, hUid := range bucketRhUids {
+			if bytes.Equal(hUid, k) {
+				if ByteSliceInArray(snapshotedLayersRhUids, hUid) {
+					return false, true
+				}
+				if bytes.Equal(s, layerSnapshotState) {
+					// Layer is a snapshot
+					snapshotedLayersRhUids = append(snapshotedLayersRhUids, hUid)
+				}
+				return true, true
 			}
-			if bytes.Equal(s, layerSnapshotState) {
-				// Layer is a snapshot
-				snapshotedLayersRhUids = append(snapshotedLayersRhUids, &hashedUid)
-			}
-			return true, false
 		}
-		return false, false
+		return false, true
 	}
+	k = 0
 	var dumps []*Dump
 	var layersByRhUid map[[128]byte][]*model.LayerRef
 	paginer2, errChan := idxService.layerIdx.FilterAll(idx.BottomToTop, layerStateFilter, layerKeyFilter)
@@ -335,7 +351,9 @@ BucketLoop:
 			if k == count {
 				return dumps, nil
 			}
+			fmt.Printf("ranging over layerIdx, layerRef: %v\n", entry.Val())
 			layersByRhUid[*entry.Key()] = append(layersByRhUid[*entry.Key()], entry.Val())
+			k++
 		}
 	}
 

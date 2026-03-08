@@ -107,5 +107,4 @@ func TestBucketIndex_PaginateAll(t *testing.T) {
 	assert.Equal(t, "baz", entries2[1].Val())
 	assert.Equal(t, "bar", entries2[2].Val())
 	assert.Equal(t, "foo", entries2[3].Val())
-
 }

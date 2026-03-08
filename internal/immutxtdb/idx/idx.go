@@ -118,7 +118,7 @@ func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, keyS
 	firstDeviceFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", qualifier, device))
 	dbf1, err := filez.NewBlocsFile(firstDeviceFilepath, 256, 100)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to build blocs file: %w", err)
 	}
 	idx := &basicIndex[K, V]{
 		Mutex:          &sync.Mutex{},
@@ -135,6 +135,26 @@ func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, keyS
 
 	// FIXME: need to setup the encoder!
 	//e.Setup()
+
+	// TODO: need to load idx.seqs !
+	for _, bf := range idx.deviceIdxFiles {
+		// Decode last line of last bloc to get current seq
+		bloc, err := bf.GetLastNonEmptyBloc()
+		if err == filez.ErrNotExist {
+			// No bloc to read
+			err = nil
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("unable to get last bloc: %w", err)
+		}
+		if bloc.Len() > 0 {
+			lastSeq, _, _, _, err := enc.DecodeLastWord(bloc.Bytes())
+			if err != nil {
+				return nil, fmt.Errorf("unable to decode last word: %w", err)
+			}
+			idx.seqs[bf.Name()] = lastSeq + 1
+		}
+	}
 
 	return idx, nil
 }
@@ -307,6 +327,7 @@ func (i *basicIndex[K, V]) FilterAll(order Order, sf StateFilter, kf KeyFilter) 
 						}
 					}
 					if kf != nil {
+						// If KeyFilter does not match ignore the entry
 						ok := false
 						ok, loop = kf(key, s)
 						if !ok {

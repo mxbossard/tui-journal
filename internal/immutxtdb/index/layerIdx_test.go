@@ -15,17 +15,24 @@ func TestLayerIndex_Add(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestLayerIndex_Add")
 	defer os.RemoveAll(tmpDir)
 
+	expectedUid0 := StringToBucketUid("foo")
+
 	bIdx, err := NewLayerIndex(tmpDir, "test", "salt")
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	err = bIdx.Add(nil, StringToBucketUid("foo"), model.NewLayerRef("file", 0, Dump))
+	err = bIdx.Add(nil, &expectedUid0, model.NewLayerRef("file", 0, Dump))
 	assert.NoError(t, err)
 }
 
 func TestLayerIndex_Count(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestLayerIndex_Count")
 	defer os.RemoveAll(tmpDir)
+
+	expectedUid0 := StringToBucketUid("foo")
+	expectedUid1 := StringToBucketUid("bar")
+	expectedUid2 := StringToBucketUid("baz")
+	expectedUid3 := StringToBucketUid("foo")
 
 	bIdx, err := NewLayerIndex(tmpDir, "test", "salt")
 	assert.NoError(t, err)
@@ -35,23 +42,23 @@ func TestLayerIndex_Count(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	err = bIdx.Add(nil, StringToBucketUid("foo"), model.NewLayerRef("file", 0, Dump))
+	err = bIdx.Add(nil, &expectedUid0, model.NewLayerRef("file", 0, Dump))
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	err = bIdx.Add(nil, StringToBucketUid("bar"), model.NewLayerRef("file", 0, Dump))
+	err = bIdx.Add(nil, &expectedUid1, model.NewLayerRef("file", 0, Dump))
 	assert.NoError(t, err)
-	err = bIdx.Add(nil, StringToBucketUid("baz"), model.NewLayerRef("file", 0, Dump))
+	err = bIdx.Add(nil, &expectedUid2, model.NewLayerRef("file", 0, Dump))
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
-	err = bIdx.Add(nil, StringToBucketUid("foo"), model.NewLayerRef("file", 0, Dump))
+	err = bIdx.Add(nil, &expectedUid3, model.NewLayerRef("file", 0, Dump))
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
@@ -72,13 +79,13 @@ func TestLayerIndex_PaginateAll(t *testing.T) {
 	bIdx, err := NewLayerIndex(tmpDir, "test", expectedSalt)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(nil, expectedBucket0, model.NewLayerRef("file1", 10, Dump))
+	err = bIdx.Add(nil, &expectedBucket0, model.NewLayerRef("file1", 10, Dump))
 	assert.NoError(t, err)
-	err = bIdx.Add(nil, expectedBucket1, model.NewLayerRef("file2", 20, Dump))
+	err = bIdx.Add(nil, &expectedBucket1, model.NewLayerRef("file2", 20, Dump))
 	assert.NoError(t, err)
-	err = bIdx.Add(nil, expectedBucket2, model.NewLayerRef("file3", 30, Dump))
+	err = bIdx.Add(nil, &expectedBucket2, model.NewLayerRef("file3", 30, Dump))
 	assert.NoError(t, err)
-	err = bIdx.Add(nil, expectedBucket3, model.NewLayerRef("file4", 40, Dump))
+	err = bIdx.Add(nil, &expectedBucket3, model.NewLayerRef("file4", 40, Dump))
 	assert.NoError(t, err)
 
 	p, errChan := bIdx.PaginateAll(idx.TopToBottom)
@@ -158,16 +165,16 @@ func TestLayerIndex_Paginate(t *testing.T) {
 	bIdx, err := NewLayerIndex(tmpDir, "test", expectedSalt)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(nil, expectedBucket0, model.NewLayerRef("file1", 10, Dump))
+	err = bIdx.Add(nil, &expectedBucket0, model.NewLayerRef("file1", 10, Dump))
 	assert.NoError(t, err)
-	err = bIdx.Add(nil, expectedBucket1, model.NewLayerRef("file2", 20, Dump))
+	err = bIdx.Add(nil, &expectedBucket1, model.NewLayerRef("file2", 20, Dump))
 	assert.NoError(t, err)
-	err = bIdx.Add(nil, expectedBucket2, model.NewLayerRef("file3", 30, Dump))
+	err = bIdx.Add(nil, &expectedBucket2, model.NewLayerRef("file3", 30, Dump))
 	assert.NoError(t, err)
-	err = bIdx.Add(nil, expectedBucket3, model.NewLayerRef("file4", 40, Dump))
+	err = bIdx.Add(nil, &expectedBucket3, model.NewLayerRef("file4", 40, Dump))
 	assert.NoError(t, err)
 
-	p, errChan := bIdx.Paginate(expectedBucket0, idx.BottomToTop)
+	p, errChan := bIdx.Paginate(&expectedBucket0, idx.BottomToTop)
 	require.NotNil(t, p)
 	require.NotNil(t, errChan)
 

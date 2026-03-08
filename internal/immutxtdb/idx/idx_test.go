@@ -70,6 +70,45 @@ func TestBasicIndex_Count(t *testing.T) {
 	assert.Equal(t, 4, count)
 }
 
+func TestBasicIndex_CountReopen(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_CountReopen")
+	defer os.RemoveAll(tmpDir)
+
+	expectedPageSize := 10
+	expectedState := dummyState
+	expectedKeySize := 8
+	keySer := serialize.AsciiSerializer{}
+	valSer := serialize.AsciiSerializer{}
+	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
+	assert.NoError(t, err)
+	require.NotNil(t, bIdx)
+
+	count, err := bIdx.Count()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	err = bIdx.Add(expectedState, "k1", "foo")
+	assert.NoError(t, err)
+	err = bIdx.Add(expectedState, "k2", "bar")
+	assert.NoError(t, err)
+	err = bIdx.Add(expectedState, "k3", "baz")
+	assert.NoError(t, err)
+
+	count, err = bIdx.Count()
+	assert.NoError(t, err)
+	assert.Equal(t, 3, count)
+
+	enc2 := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	bIdx2, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc2, expectedPageSize)
+	assert.NoError(t, err)
+	require.NotNil(t, bIdx)
+
+	count, err = bIdx2.Count()
+	assert.NoError(t, err)
+	assert.Equal(t, 3, count)
+}
+
 func TestBasicIndex_PaginateAll(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_PaginateAll")
 	defer os.RemoveAll(tmpDir)
@@ -133,6 +172,60 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	assert.Equal(t, "bar", entries2[2].Val())
 	assert.Equal(t, "k1", entries2[3].Key())
 	assert.Equal(t, "foo", entries2[3].Val())
+}
+
+func TestBasicIndex_PaginateAllReopen(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_PaginateAllReopen")
+	defer os.RemoveAll(tmpDir)
+
+	expectedPageSize := 10
+	expectedState := dummyState
+	expectedKeySize := 16
+	expectedQualifier := "foo"
+	expectedDevice := "bar"
+	keySer := serialize.AsciiSerializer{}
+	valSer := serialize.AsciiSerializer{}
+
+	// Open a first Idx
+	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	bIdx, err := NewBasicIndex(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, enc, expectedPageSize)
+	assert.NoError(t, err)
+	require.NotNil(t, bIdx)
+	err = bIdx.Add(expectedState, "k1", "foo")
+	assert.NoError(t, err)
+	err = bIdx.Add(expectedState, "k2", "bar")
+	assert.NoError(t, err)
+	err = bIdx.Add(expectedState, "k3", "baz")
+	assert.NoError(t, err)
+	err = bIdx.Add(expectedState, "k1", "pif")
+	assert.NoError(t, err)
+
+	// Open a second Idx
+	enc2 := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	bIdx2, err := NewBasicIndex(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, enc2, expectedPageSize)
+	assert.NoError(t, err)
+	require.NotNil(t, bIdx)
+
+	p, errChan := bIdx2.PaginateAll(TopToBottom)
+	require.NotNil(t, p)
+	require.NotNil(t, errChan)
+
+	page, ok, err := p.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 4, page.Len())
+	require.True(t, page.Len() >= 4)
+
+	entries := page.Entries()
+	assert.Equal(t, "k1", entries[0].Key())
+	assert.Equal(t, "foo", entries[0].Val())
+	assert.Equal(t, "k2", entries[1].Key())
+	assert.Equal(t, "bar", entries[1].Val())
+	assert.Equal(t, "k3", entries[2].Key())
+	assert.Equal(t, "baz", entries[2].Val())
+	assert.Equal(t, "k1", entries[3].Key())
+	assert.Equal(t, "pif", entries[3].Val())
 }
 
 func TestBasicIndex_Paginate(t *testing.T) {

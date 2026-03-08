@@ -1,19 +1,24 @@
 package service
 
 import (
+	"os"
 	"testing"
 	"time"
 
+	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/ztring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestUseCaseDump0_Create(t *testing.T) {
+	tmpDir := filez.MkTempOrPanic("TestUseCaseDump0_Create")
+	defer os.Remove(tmpDir)
+
 	now := time.Now()
 	expextedDevice := "foo"
 	expectedTxt := ztring.LoremIpsumWords(10)
-	d, err := UseCaseDump0_Create("salt", expextedDevice, expectedTxt)
+	d, err := UseCaseDump0_Create(tmpDir, "salt", expextedDevice, expectedTxt)
 	assert.NoError(t, err)
 	assert.NotNil(t, d)
 
@@ -40,6 +45,9 @@ func TestUseCaseDump0_Create(t *testing.T) {
 }
 
 func TestUseCaseDump1_ListLast(t *testing.T) {
+	tmpDir := filez.MkTempOrPanic("TestUseCaseDump1_ListLast")
+	defer os.Remove(tmpDir)
+
 	expectedSalt := "salt"
 	expextedDevice := "foo"
 	expectedTxt1 := ztring.LoremIpsumWords(5)
@@ -47,11 +55,11 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	expectedTxt3 := ztring.LoremIpsumWords(15)
 
 	// Add first dump
-	d1, err := UseCaseDump0_Create(expectedSalt, expextedDevice, expectedTxt1)
+	d1, err := UseCaseDump0_Create(tmpDir, expectedSalt, expextedDevice, expectedTxt1)
 	assert.NoError(t, err)
 	assert.NotNil(t, d1)
 
-	dumps, err := UseCaseDump1_ListLast(expectedSalt, 5)
+	dumps, err := UseCaseDump1_ListLast(tmpDir, expextedDevice, expectedSalt, 5)
 	assert.NoError(t, err)
 	assert.NotNil(t, dumps)
 	require.Len(t, dumps, 1)
@@ -60,11 +68,11 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	assert.Equal(t, expectedTxt1, txt1)
 
 	// Add second dump
-	d2, err := UseCaseDump0_Create(expectedSalt, expextedDevice, expectedTxt2)
+	d2, err := UseCaseDump0_Create(tmpDir, expectedSalt, expextedDevice, expectedTxt2)
 	assert.NoError(t, err)
 	assert.NotNil(t, d2)
 
-	dumps, err = UseCaseDump1_ListLast(expectedSalt, 5)
+	dumps, err = UseCaseDump1_ListLast(tmpDir, expextedDevice, expectedSalt, 5)
 	assert.NoError(t, err)
 	assert.NotNil(t, dumps)
 	require.Len(t, dumps, 2)
@@ -76,11 +84,11 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	assert.Equal(t, expectedTxt1, txt1)
 
 	// Add thirs dump
-	d3, err := UseCaseDump0_Create(expectedSalt, expextedDevice, expectedTxt3)
+	d3, err := UseCaseDump0_Create(tmpDir, expectedSalt, expextedDevice, expectedTxt3)
 	assert.NoError(t, err)
 	assert.NotNil(t, d3)
 
-	dumps, err = UseCaseDump1_ListLast(expectedSalt, 5)
+	dumps, err = UseCaseDump1_ListLast(tmpDir, expextedDevice, expectedSalt, 5)
 	assert.NoError(t, err)
 	assert.NotNil(t, dumps)
 	require.Len(t, dumps, 3)
@@ -94,7 +102,7 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt1, txt1)
 
-	dumps, err = UseCaseDump1_ListLast(expectedSalt, 2)
+	dumps, err = UseCaseDump1_ListLast(tmpDir, expextedDevice, expectedSalt, 2)
 	assert.NoError(t, err)
 	assert.NotNil(t, dumps)
 	require.Len(t, dumps, 2)

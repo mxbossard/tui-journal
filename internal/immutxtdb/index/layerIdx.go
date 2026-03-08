@@ -25,10 +25,14 @@ var (
 
 type HashedBucketUid [LayerIdxKeySize]byte
 
-func StringToBucketUid(uid string) *HashedBucketUid {
+func ByteSliceToBucketUid(uid []byte) HashedBucketUid {
 	var a HashedBucketUid
-	copy(a[:], []byte(uid))
-	return &a
+	copy(a[:], uid)
+	return a
+}
+
+func StringToBucketUid(uid string) HashedBucketUid {
+	return ByteSliceToBucketUid([]byte(uid))
 }
 
 type BucketUidSerializer struct {
