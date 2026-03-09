@@ -54,8 +54,10 @@ type Index[K comparable, V any] interface {
 	Add(s State, key K, val V) error
 	Count() (int, error)
 	Filter(key K, order Order, sf StateFilter) (Paginer[K, V], chan error)
+	HashedFilter(key K, order Order, sf StateFilter) (Paginer[K, V], chan error)
 	FilterAll(order Order, sf StateFilter, kf KeyFilter) (Paginer[K, V], chan error)
 	Paginate(key K, order Order) (Paginer[K, V], chan error)
+	HashedPaginate(key K, order Order) (Paginer[K, V], chan error)
 	PaginateAll(order Order) (Paginer[K, V], chan error)
 	All(order Order, errChan chan error) iter.Seq2[K, V]
 }
@@ -226,85 +228,26 @@ func (i *basicIndex[K, V]) Count() (int, error) {
 	return count, nil
 }
 
-func (i *basicIndex[K, V]) Filter(suppliedKey K, order Order, sf StateFilter) (Paginer[K, V], chan error) {
-	errChan := make(chan error)
-
-	var hashedK []byte
-	filteringK := make([]byte, i.encoder.KeySize())
-	var err error
-	if i.keySerializer != nil {
-		err = i.keySerializer.Serialize(suppliedKey, filteringK)
-		if err != nil {
-			errChan <- err
-			return nil, errChan
-		}
-	}
-
-	idxFiles := append(i.deviceIdxFiles, i.otherIdxFiles...)
-	p := NewPaginer(i.pageSize, 0, func(push func(State, K, V, error) bool) {
-		//panic("not implemented yet")
-	End:
-		for _, bf := range idxFiles {
-			for b := range bf.All(filez.BlocOrdering(order), errChan) {
-				loop := true
-				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, s State, key []byte, val []byte, err error) bool {
-					if err != nil {
-						errChan <- err
-						return true
-					}
-
-					if sf != nil {
-						// If StateFilter does not match ignore the entry
-						ok := false
-						ok, loop = sf(s)
-						if !ok {
-							return true
-						}
-					}
-					if i.keyHasher != nil {
-						// Rotating Hash
-						hashedK, err = i.keyHasher(seq, filteringK)
-						if err != nil {
-							errChan <- err
-							return true
-						}
-					} else {
-						hashedK = filteringK
-					}
-					// FIXME: do not use serializer if K or V is of []byte type.
-					if bytes.Equal(hashedK, key) {
-						// if key == filteringKey {
-						// FIXME: if key was hashed => cannot be deserialized ! => return nil ?
-						var k K
-						if i.keySerializer != nil {
-							k, err = i.keySerializer.Deserialize(key)
-						}
-						var v V
-						if i.valSerializer != nil {
-							v, err = i.valSerializer.Deserialize(val)
-						}
-						if !push(s, k, v, err) {
-							return false
-						}
-					}
-					return loop
-
-				})
-				if !loop {
-					// Stop iterating
-					goto End
-				}
-			}
-		}
-	})
-	return p, errChan
-}
-
-func (i *basicIndex[K, V]) FilterAll(order Order, sf StateFilter, kf KeyFilter) (Paginer[K, V], chan error) {
+func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, order Order, sf StateFilter, kf KeyFilter) (Paginer[K, V], chan error) {
 	// TODO: cache all the bloc file content ?
 	// TODO: call all the index content ?
 	// FIXME : which order of idx files to iterate ?
+
 	errChan := make(chan error)
+	var hashedK []byte
+	var filteringK []byte
+	if keyFiltering {
+		filteringK := make([]byte, i.encoder.KeySize())
+		var err error
+		if i.keySerializer != nil {
+			err = i.keySerializer.Serialize(suppliedKey, filteringK)
+			if err != nil {
+				errChan <- err
+				return nil, errChan
+			}
+		}
+	}
+
 	idxFiles := append(i.deviceIdxFiles, i.otherIdxFiles...)
 	p := NewPaginer(i.pageSize, 0, func(push func(State, K, V, error) bool) {
 		//panic("not implemented yet")
@@ -335,24 +278,41 @@ func (i *basicIndex[K, V]) FilterAll(order Order, sf StateFilter, kf KeyFilter) 
 						}
 					}
 
+					if keyFiltering && hashedKey {
+						if i.keyHasher != nil {
+							// Rotating Hash
+							hashedK, err = i.keyHasher(seq, filteringK)
+							if err != nil {
+								errChan <- err
+								return true
+							}
+						} else {
+							hashedK = filteringK
+						}
+					}
+
 					// FIXME: do not use serializer if K or V is of []byte type.
-					var k K
-					if i.keySerializer != nil {
-						k, err = i.keySerializer.Deserialize(key)
-					}
-					var v V
-					if i.valSerializer != nil {
-						v, err = i.valSerializer.Deserialize(val)
-					}
-					if !push(s, k, v, err) {
-						return false
+					if !keyFiltering || bytes.Equal(hashedK, key) {
+						// if key == filteringKey {
+						// FIXME: if key was hashed => cannot be deserialized ! => return nil ?
+						var k K
+						if i.keySerializer != nil {
+							k, err = i.keySerializer.Deserialize(key)
+						}
+						var v V
+						if i.valSerializer != nil {
+							v, err = i.valSerializer.Deserialize(val)
+						}
+						if !push(s, k, v, err) {
+							return false
+						}
 					}
 					return loop
-				})
 
+				})
 				if !loop {
 					// Stop iterating
-					break End
+					goto End
 				}
 			}
 		}
@@ -360,12 +320,30 @@ func (i *basicIndex[K, V]) FilterAll(order Order, sf StateFilter, kf KeyFilter) 
 	return p, errChan
 }
 
+func (i *basicIndex[K, V]) Filter(suppliedKey K, order Order, sf StateFilter) (Paginer[K, V], chan error) {
+	return i.filter(suppliedKey, true, false, order, sf, nil)
+}
+
+func (i *basicIndex[K, V]) HashedFilter(suppliedKey K, order Order, sf StateFilter) (Paginer[K, V], chan error) {
+	return i.filter(suppliedKey, true, true, order, sf, nil)
+}
+
+func (i *basicIndex[K, V]) FilterAll(order Order, sf StateFilter, kf KeyFilter) (Paginer[K, V], chan error) {
+	var noKey K
+	return i.filter(noKey, false, false, order, sf, kf)
+}
+
 func (i *basicIndex[K, V]) Paginate(key K, order Order) (Paginer[K, V], chan error) {
-	return i.Filter(key, order, nil)
+	return i.filter(key, true, false, order, nil, nil)
+}
+
+func (i *basicIndex[K, V]) HashedPaginate(key K, order Order) (Paginer[K, V], chan error) {
+	return i.filter(key, true, true, order, nil, nil)
 }
 
 func (i *basicIndex[K, V]) PaginateAll(order Order) (Paginer[K, V], chan error) {
-	return i.FilterAll(order, nil, nil)
+	var noKey K
+	return i.filter(noKey, false, false, order, nil, nil)
 }
 
 func FixedSizeString(s int, k string) []byte {
