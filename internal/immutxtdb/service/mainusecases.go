@@ -322,6 +322,7 @@ BucketLoop:
 		for _, hUid := range bucketRhUids {
 			if bytes.Equal(hUid, k) {
 				if ByteSliceInArray(snapshotedLayersRhUids, hUid) {
+					// RhUid already seen go on looping
 					return false, true
 				}
 				if bytes.Equal(s, layerSnapshotState) {
@@ -345,7 +346,6 @@ BucketLoop:
 		if err := errorz.ChanCollect(errChan); err.GotError() {
 			return nil, err
 		}
-		// FIXME what is this pos ? is it seq ?
 		for pos, entry := range page.All() {
 			_ = pos
 			if k == count {

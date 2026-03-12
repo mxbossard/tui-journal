@@ -237,7 +237,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 	var hashedK []byte
 	var filteringK []byte
 	if keyFiltering {
-		filteringK := make([]byte, i.encoder.KeySize())
+		filteringK = make([]byte, i.encoder.KeySize())
 		var err error
 		if i.keySerializer != nil {
 			err = i.keySerializer.Serialize(suppliedKey, filteringK)
@@ -278,8 +278,8 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 						}
 					}
 
-					if keyFiltering && hashedKey {
-						if i.keyHasher != nil {
+					if keyFiltering {
+						if hashedKey && i.keyHasher != nil {
 							// Rotating Hash
 							hashedK, err = i.keyHasher(seq, filteringK)
 							if err != nil {

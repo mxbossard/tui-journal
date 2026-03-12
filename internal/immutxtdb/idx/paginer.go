@@ -36,7 +36,7 @@ func (p page[K, V]) Err() error {
 	return p.err
 }
 
-// Entries iterator
+// Entries iterator return (position in index, entry[K, V])
 func (p *page[K, V]) All() iter.Seq2[int, Entry[K, V]] {
 	return func(yield func(int, Entry[K, V]) bool) {
 		for pos, e := range p.entries {
