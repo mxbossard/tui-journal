@@ -7,6 +7,7 @@ import (
 	"iter"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/utilz/filez"
@@ -33,11 +34,6 @@ type State []byte
 
 var dummyState = BuildState(8, "dummy")
 
-// Return ok=true to select entry, return loop=false to stop iterating.
-type StateFilter func(s State) (ok bool, loop bool)
-
-// Return ok=true to select entry, return loop=false to stop iterating.
-type KeyFilter func(k []byte, s State) (ok bool, loop bool)
 type RotatingHasher func(int, []byte) ([]byte, error)
 type KeyRotatingHasher[K comparable] func(int, K) (K, error)
 
@@ -51,11 +47,11 @@ func BuildState(size int, s string) State {
 }
 
 type Index[K comparable, V any] interface {
-	Add(s State, key K, val V) error
+	Add(s State, t time.Time, key K, val V) error
 	Count() (int, error)
-	Filter(key K, order Order, sf StateFilter) (Paginer[K, V], chan error)
-	HashedFilter(key K, order Order, sf StateFilter) (Paginer[K, V], chan error)
-	FilterAll(order Order, sf StateFilter, kf KeyFilter) (Paginer[K, V], chan error)
+	Filter(key K, order Order, f Filter) (Paginer[K, V], chan error)
+	HashedFilter(key K, order Order, f Filter) (Paginer[K, V], chan error)
+	FilterAll(order Order, f Filter) (Paginer[K, V], chan error)
 	Paginate(key K, order Order) (Paginer[K, V], chan error)
 	HashedPaginate(key K, order Order) (Paginer[K, V], chan error)
 	PaginateAll(order Order) (Paginer[K, V], chan error)
@@ -150,7 +146,7 @@ func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, keyS
 			return nil, fmt.Errorf("unable to get last bloc: %w", err)
 		}
 		if bloc.Len() > 0 {
-			lastSeq, _, _, _, err := enc.DecodeLastWord(bloc.Bytes())
+			lastSeq, _, _, _, _, err := enc.DecodeLastWord(bloc.Bytes())
 			if err != nil {
 				return nil, fmt.Errorf("unable to decode last word: %w", err)
 			}
@@ -165,7 +161,7 @@ func (i *basicIndex[K, V]) selectDeviceBlocFile(s State, k K) *filez.BlocsFile {
 	return i.deviceIdxFiles[0]
 }
 
-func (i *basicIndex[K, V]) Add(s State, k K, v V) error {
+func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) error {
 	i.Lock()
 	defer i.Unlock()
 
@@ -203,7 +199,7 @@ func (i *basicIndex[K, V]) Add(s State, k K, v V) error {
 		}
 	}
 
-	entry, err := i.encoder.Encode(seq, s, key, val)
+	entry, err := i.encoder.Encode(seq, t, s, key, val)
 	if err != nil {
 		return fmt.Errorf("error encoding entry: %w", err)
 	}
@@ -255,7 +251,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 		for _, bf := range idxFiles {
 			for b := range bf.All(filez.BlocOrdering(order), errChan) {
 				loop := true
-				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, s State, key []byte, val []byte, err error) bool {
+				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
 					if err != nil {
 						errChan <- err
 						return true

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"time"
 )
 
 type Euid uint64
@@ -19,12 +20,12 @@ type IdxEncoder interface {
 	Header() []byte
 	Match(header []byte) bool
 	Setup(header []byte) error
-	Encode(seq int, s State, key []byte, val []byte) ([]byte, error)
+	Encode(seq int, t time.Time, s State, key []byte, val []byte) ([]byte, error)
 	// Decode first word in supplied byte slice.
-	Decode([]byte) (seq int, s State, key []byte, val []byte, err error)
+	Decode([]byte) (seq int, t time.Time, s State, key []byte, val []byte, err error)
 	// Decode last word in supplied byte slice.
-	DecodeLastWord([]byte) (seq int, s State, key []byte, val []byte, err error)
-	DecodeAll(Order, []byte, func(seq int, s State, key []byte, val []byte, err error) bool)
+	DecodeLastWord([]byte) (seq int, t time.Time, s State, key []byte, val []byte, err error)
+	DecodeAll(Order, []byte, func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool)
 }
 
 type basicIdxEncoder struct {
@@ -59,7 +60,7 @@ func (e basicIdxEncoder) ValSize() int {
 }
 
 func (e basicIdxEncoder) WordSize() int {
-	return 8 + int(e.stateSize) + int(e.keySize) + int(e.valSize)
+	return 8 + int(e.stateSize) + int(e.keySize) + int(e.valSize) + 4
 }
 
 func (e basicIdxEncoder) Header() []byte {
@@ -147,7 +148,7 @@ func (e *basicIdxEncoder) Setup(header []byte) error {
 	return nil
 }
 
-func (e basicIdxEncoder) Encode(seq int, s State, k []byte, v []byte) ([]byte, error) {
+func (e basicIdxEncoder) Encode(seq int, t time.Time, s State, k []byte, v []byte) ([]byte, error) {
 	// if k == nil {
 	// 	panic("key must not be nil")
 	// }
@@ -175,6 +176,12 @@ func (e basicIdxEncoder) Encode(seq int, s State, k []byte, v []byte) ([]byte, e
 	n, err := binary.Encode(buf[i:], binary.BigEndian, int32(seq))
 	if err != nil {
 		return nil, fmt.Errorf("encoding seq: %w", err)
+	}
+	i += n
+
+	n, err = binary.Encode(buf[i:], binary.BigEndian, int32(t.Unix()/86400))
+	if err != nil {
+		return nil, fmt.Errorf("encoding time: %w", err)
 	}
 	i += n
 
@@ -210,28 +217,37 @@ func (e basicIdxEncoder) Encode(seq int, s State, k []byte, v []byte) ([]byte, e
 	return buf, nil
 }
 
-func (e *basicIdxEncoder) Decode(buf []byte) (int, State, []byte, []byte, error) {
+func (e *basicIdxEncoder) Decode(buf []byte) (int, time.Time, State, []byte, []byte, error) {
 	var seq, dataLen int32
 	var s State
+	var tim int32
+	var t time.Time
 	var key []byte
 	var val []byte
 	// fmt.Printf("decoding config: statSize: %d ; dataSize: %d\n", e.stateSize, e.dataSize)
 
 	if len(buf) < e.WordSize() {
-		return int(seq), s, key, val, fmt.Errorf("cannot decode data of length: %d < wordSize: %d", len(buf), e.WordSize())
+		return int(seq), t, s, key, val, fmt.Errorf("cannot decode data of length: %d < wordSize: %d", len(buf), e.WordSize())
 	}
 
 	k := 0
 	n, err := binary.Decode(buf[k:k+4], binary.BigEndian, &seq)
 	if err != nil {
-		return int(seq), s, key, val, fmt.Errorf("decoding seq: %w", err)
+		return int(seq), t, s, key, val, fmt.Errorf("decoding seq: %w", err)
 	}
 	k += n
+
+	n, err = binary.Decode(buf[k:k+4], binary.BigEndian, &tim)
+	if err != nil {
+		return int(seq), t, s, key, val, fmt.Errorf("decoding time: %w", err)
+	}
+	k += 4
+	t = time.Unix(int64(86400*tim), 0)
 
 	var stateData = make([]byte, e.stateSize)
 	n, err = binary.Decode(buf[k:k+e.stateSize], binary.BigEndian, &stateData)
 	if err != nil {
-		return int(seq), s, key, val, fmt.Errorf("decoding state: %w", err)
+		return int(seq), t, s, key, val, fmt.Errorf("decoding state: %w", err)
 	}
 	k += e.stateSize
 	s = State(stateData)
@@ -239,25 +255,25 @@ func (e *basicIdxEncoder) Decode(buf []byte) (int, State, []byte, []byte, error)
 	key = make([]byte, e.keySize)
 	n, err = binary.Decode(buf[k:k+e.keySize], binary.BigEndian, &key)
 	if err != nil {
-		return int(seq), s, key, val, fmt.Errorf("decoding key: %w", err)
+		return int(seq), t, s, key, val, fmt.Errorf("decoding key: %w", err)
 	}
 	k += e.keySize
 
 	n, err = binary.Decode(buf[k:k+4], binary.BigEndian, &dataLen)
 	if err != nil {
-		return int(seq), s, key, val, fmt.Errorf("decoding data length: %w", err)
+		return int(seq), t, s, key, val, fmt.Errorf("decoding data length: %w", err)
 	}
 	k += n
 
 	if dataLen > int32(e.valSize) {
-		return int(seq), s, key, val, fmt.Errorf("bad encoded data length: %d", dataLen)
+		return int(seq), t, s, key, val, fmt.Errorf("bad encoded data length: %d", dataLen)
 	}
 
 	if dataLen > 0 {
 		val = make([]byte, dataLen)
 		n, err = binary.Decode(buf[k:k+int(dataLen)], binary.BigEndian, &val)
 		if err != nil {
-			return int(seq), s, key, val, fmt.Errorf("decoding value: %w", err)
+			return int(seq), t, s, key, val, fmt.Errorf("decoding value: %w", err)
 		}
 		k += e.valSize
 
@@ -271,27 +287,27 @@ func (e *basicIdxEncoder) Decode(buf []byte) (int, State, []byte, []byte, error)
 		// }
 	}
 
-	return int(seq), s, key, val, nil
+	return int(seq), t, s, key, val, nil
 
 }
 
-func (e *basicIdxEncoder) DecodeLastWord(buf []byte) (int, State, []byte, []byte, error) {
+func (e *basicIdxEncoder) DecodeLastWord(buf []byte) (int, time.Time, State, []byte, []byte, error) {
 	lastWordStart := (len(buf)/e.WordSize() - 1) * e.WordSize()
 	return e.Decode(buf[lastWordStart:])
 }
 
-func (e basicIdxEncoder) DecodeAll(order Order, buf []byte, push func(int, State, []byte, []byte, error) bool) {
+func (e basicIdxEncoder) DecodeAll(order Order, buf []byte, push func(int, time.Time, State, []byte, []byte, error) bool) {
 	wordSize := e.WordSize()
 	if order == TopToBottom {
 		for k := 0; k < len(buf); k += wordSize {
-			seq, state, key, val, err := e.Decode(buf[k:])
-			push(seq, state, key, val, err)
+			seq, state, t, key, val, err := e.Decode(buf[k:])
+			push(seq, state, t, key, val, err)
 		}
 	} else if order == BottomToTop {
 		wordCount := len(buf) / wordSize
 		for k := (wordCount - 1) * wordSize; k >= 0; k -= wordSize {
-			seq, state, key, val, err := e.Decode(buf[k : k+wordSize])
-			if !push(seq, state, key, val, err) {
+			seq, state, t, key, val, err := e.Decode(buf[k : k+wordSize])
+			if !push(seq, state, t, key, val, err) {
 				// Stop iterating
 				break
 			}

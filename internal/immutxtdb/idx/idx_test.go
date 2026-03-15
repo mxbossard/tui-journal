@@ -3,6 +3,7 @@ package idx
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/utilz/filez"
@@ -16,6 +17,7 @@ func TestBasicIndex_Add(t *testing.T) {
 
 	expectedPageSize := 10
 	expectedState := dummyState
+	expectedTime := time.Now()
 	expectedKeySize := 8
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
@@ -24,7 +26,7 @@ func TestBasicIndex_Add(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	err = bIdx.Add(expectedState, "k1", "foo")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
 }
 
@@ -34,6 +36,7 @@ func TestBasicIndex_Count(t *testing.T) {
 
 	expectedPageSize := 10
 	expectedState := dummyState
+	expectedTime := time.Now()
 	expectedKeySize := 8
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
@@ -46,23 +49,23 @@ func TestBasicIndex_Count(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	err = bIdx.Add(expectedState, "k1", "foo")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	err = bIdx.Add(expectedState, "k2", "bar")
+	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k3", "baz")
+	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
-	err = bIdx.Add(expectedState, "k1", "pif")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
@@ -76,6 +79,7 @@ func TestBasicIndex_CountReopen(t *testing.T) {
 
 	expectedPageSize := 10
 	expectedState := dummyState
+	expectedTime := time.Now()
 	expectedKeySize := 8
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
@@ -88,11 +92,11 @@ func TestBasicIndex_CountReopen(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	err = bIdx.Add(expectedState, "k1", "foo")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k2", "bar")
+	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k3", "baz")
+	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
@@ -115,6 +119,7 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 
 	expectedPageSize := 10
 	expectedState := dummyState
+	expectedTime := time.Now()
 	expectedKeySize := 16
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
@@ -122,13 +127,13 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(expectedState, "k1", "foo")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k2", "bar")
+	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k3", "baz")
+	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k1", "pif")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
 	p, errChan := bIdx.PaginateAll(TopToBottom)
@@ -180,6 +185,7 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 
 	expectedPageSize := 10
 	expectedState := dummyState
+	expectedTime := time.Now()
 	expectedKeySize := 16
 	expectedQualifier := "foo"
 	expectedDevice := "bar"
@@ -191,13 +197,13 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 	bIdx, err := NewBasicIndex(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(expectedState, "k1", "foo")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k2", "bar")
+	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k3", "baz")
+	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k1", "pif")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
 	// Open a second Idx
@@ -234,6 +240,7 @@ func TestBasicIndex_Paginate(t *testing.T) {
 
 	expectedPageSize := 10
 	expectedState := dummyState
+	expectedTime := time.Now()
 	expectedKeySize := 16
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
@@ -241,13 +248,13 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(expectedState, "k1", "foo")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k2", "bar")
+	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k3", "baz")
+	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, "k1", "pif")
+	err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
 	pk1, errChan := bIdx.Paginate("k1", TopToBottom)
