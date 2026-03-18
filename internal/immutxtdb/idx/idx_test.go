@@ -1,6 +1,7 @@
 package idx
 
 import (
+	"bytes"
 	"os"
 	"testing"
 	"time"
@@ -25,6 +26,8 @@ func TestBasicIndex_Add(t *testing.T) {
 	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
+
+	assert.Implements(t, (*Index[string, string])(nil), bIdx)
 
 	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
@@ -235,7 +238,7 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 }
 
 func TestBasicIndex_Paginate(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_PaginateAll")
+	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Paginate")
 	defer os.RemoveAll(tmpDir)
 
 	expectedPageSize := 10
@@ -305,4 +308,147 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	entries3 := page3.Entries()
 	assert.Equal(t, "k3", entries3[0].Key())
 	assert.Equal(t, "baz", entries3[0].Val())
+}
+
+func TestBasicIndex_Filter(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Filter")
+	defer os.RemoveAll(tmpDir)
+
+	expectedPageSize := 10
+	expectedStateLen := 8
+	expectedState1 := BuildState(expectedStateLen, "state1")
+	expectedState2 := BuildState(expectedStateLen, "state2")
+	expectedState3 := BuildState(expectedStateLen, "state3")
+	time1, err := time.Parse(YYYYMMDD, "2026-03-15")
+	require.NoError(t, err)
+	time2, err := time.Parse(YYYYMMDD, "2026-03-16")
+	require.NoError(t, err)
+	time3, err := time.Parse(YYYYMMDD, "2026-03-17")
+	require.NoError(t, err)
+	time4, err := time.Parse(YYYYMMDD, "2026-03-18")
+	require.NoError(t, err)
+	time5, err := time.Parse(YYYYMMDD, "2026-03-19")
+	require.NoError(t, err)
+	time6, err := time.Parse(YYYYMMDD, "2026-03-20")
+	require.NoError(t, err)
+	_ = time1
+	_ = time6
+
+	expectedKeySize := 16
+	keySer := serialize.AsciiSerializer{}
+	valSer := serialize.AsciiSerializer{}
+	enc := NewAsciiEncoder(0, expectedStateLen, expectedKeySize, 100)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
+	assert.NoError(t, err)
+	require.NotNil(t, bIdx)
+	err = bIdx.Add(expectedState1, time2, "k1", "foo")
+	assert.NoError(t, err)
+	err = bIdx.Add(expectedState1, time3, "k2", "bar")
+	assert.NoError(t, err)
+	err = bIdx.Add(expectedState2, time4, "k3", "baz")
+	assert.NoError(t, err)
+	err = bIdx.Add(expectedState3, time5, "k1", "pif")
+	assert.NoError(t, err)
+
+	p1, errChan := bIdx.FilterAll(TopToBottom, BeforeFilter(time4))
+	require.NotNil(t, p1)
+	require.NotNil(t, errChan)
+
+	page, ok, err := p1.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 2, page.Len())
+	require.True(t, page.Len() >= 2)
+
+	entries := page.Entries()
+	assert.Equal(t, "k1", entries[0].Key())
+	assert.Equal(t, "foo", entries[0].Val())
+	assert.Equal(t, "k2", entries[1].Key())
+	assert.Equal(t, "bar", entries[1].Val())
+
+	p2, errChan := bIdx.FilterAll(TopToBottom, AfterFilter(time4))
+	require.NotNil(t, p2)
+	require.NotNil(t, errChan)
+
+	page, ok, err = p2.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 1, page.Len())
+	require.True(t, page.Len() >= 1)
+
+	entries = page.Entries()
+	assert.Equal(t, "k1", entries[0].Key())
+	assert.Equal(t, "pif", entries[0].Val())
+
+	p3, errChan := bIdx.FilterAll(TopToBottom, BetweenFilter(time2, time4))
+	require.NotNil(t, p3)
+	require.NotNil(t, errChan)
+
+	page, ok, err = p3.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 1, page.Len())
+	require.True(t, page.Len() >= 1)
+
+	entries = page.Entries()
+	assert.Equal(t, "k2", entries[0].Key())
+	assert.Equal(t, "bar", entries[0].Val())
+
+	p4, errChan := bIdx.Filter("k1", TopToBottom, AfterFilter(time2))
+	require.NotNil(t, p4)
+	require.NotNil(t, errChan)
+
+	page, ok, err = p4.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 1, page.Len())
+	require.True(t, page.Len() >= 1)
+
+	entries = page.Entries()
+	assert.Equal(t, "k1", entries[0].Key())
+	assert.Equal(t, "pif", entries[0].Val())
+
+	p5, errChan := bIdx.FilterAll(TopToBottom, StateFilter(func(s State) (ok bool, loop bool) {
+		loop = true
+		ok = bytes.Equal(s, expectedState1)
+		return
+	}))
+	require.NotNil(t, p5)
+	require.NotNil(t, errChan)
+
+	page, ok, err = p5.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 2, page.Len())
+	require.True(t, page.Len() >= 2)
+
+	entries = page.Entries()
+	assert.Equal(t, "k1", entries[0].Key())
+	assert.Equal(t, "foo", entries[0].Val())
+	assert.Equal(t, "k2", entries[1].Key())
+	assert.Equal(t, "bar", entries[1].Val())
+
+	p6, errChan := bIdx.FilterAll(TopToBottom, StateFilter(func(s State) (ok bool, loop bool) {
+		loop = true
+		ok = bytes.Equal(s, expectedState2)
+		return
+	}))
+	require.NotNil(t, p6)
+	require.NotNil(t, errChan)
+
+	page, ok, err = p6.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 1, page.Len())
+	require.True(t, page.Len() >= 1)
+
+	entries = page.Entries()
+	assert.Equal(t, "k3", entries[0].Key())
+	assert.Equal(t, "baz", entries[0].Val())
 }

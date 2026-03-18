@@ -17,7 +17,7 @@ type DB struct {
 	layerIdx  index.LayerIndex
 }
 
-func RotatingHashString(s string) *index.HashedBucketUid {
+func RotatingHashString(s string) *model.HashedBucketUid {
 	panic("not implemented yet")
 }
 

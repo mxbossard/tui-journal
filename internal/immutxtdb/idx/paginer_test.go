@@ -53,7 +53,7 @@ func TestPaginer_AllIterator(t *testing.T) {
 	require.NotNil(t, p)
 
 	i := 0
-	for err, page := range p.All() {
+	for err, page := range p.Pages() {
 		assert.NoError(t, err)
 		require.NotNil(t, p)
 		assert.Equal(t, i, page.Number(), "bad page number")

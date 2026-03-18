@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,24 +38,46 @@ var dummyState = BuildState(8, "dummy")
 type RotatingHasher func(int, []byte) ([]byte, error)
 type KeyRotatingHasher[K comparable] func(int, K) (K, error)
 
-func BuildState(size int, s string) State {
+func BuildState(size int, s ...string) State {
 	data := make([]byte, size)
-	_, err := binary.Encode(data, binary.BigEndian, []byte(s))
+	_, err := binary.Encode(data, binary.BigEndian, []byte(strings.Join(s, "")))
 	if err != nil {
 		panic(err)
 	}
+	// fmt.Printf("built state of size: %d with strings: %v => %v\n", size, s, data)
 	return State(data)
 }
 
+func CatState(size int, states ...State) State {
+	data := make([]byte, size)
+	k := 0
+	for _, s := range states {
+		copy(data[k:], s)
+		k += len(s)
+	}
+	// fmt.Printf("cat state of size: %d with states: %v => %v\n", size, states, data)
+	return State(data)
+}
+
+// FIXME: Paginer SHOULD return KV Entries also embedding seq, time and state ?
 type Index[K comparable, V any] interface {
+	// Add a KV entry
 	Add(s State, t time.Time, key K, val V) error
+	// Return KV entries count
 	Count() (int, error)
+	// Paginate all KV entries matching supplied key & Filter
 	Filter(key K, order Order, f Filter) (Paginer[K, V], chan error)
+	// Paginate all KV entries matching supplied key & Filter
 	HashedFilter(key K, order Order, f Filter) (Paginer[K, V], chan error)
+	// Paginate all KV entries matching supplied Filter
 	FilterAll(order Order, f Filter) (Paginer[K, V], chan error)
+	// Paginate all KV entries matching supplied key
 	Paginate(key K, order Order) (Paginer[K, V], chan error)
+	// Paginate all KV entries matching supplied key which will be rotating hashed
 	HashedPaginate(key K, order Order) (Paginer[K, V], chan error)
+	// Paginate all KV entries
 	PaginateAll(order Order) (Paginer[K, V], chan error)
+	// Return an iterator of all KV entries
 	All(order Order, errChan chan error) iter.Seq2[K, V]
 }
 
@@ -64,6 +87,8 @@ type Void *void
 type Entry[K comparable, V any] interface {
 	Key() K
 	Val() V
+	Seq() int
+	Time() time.Time
 	State() State
 	Error() error
 }
@@ -71,8 +96,20 @@ type Entry[K comparable, V any] interface {
 type BasicEntry[K comparable, V any] struct {
 	key   K
 	val   V
+	seq   int
+	time  time.Time
 	state State
 	err   error
+}
+
+func NewEntry[K comparable, V any](key K, val V, seq int, time time.Time, state State, err error) (e BasicEntry[K, V]) {
+	e.key = key
+	e.val = val
+	e.seq = seq
+	e.time = time
+	e.state = state
+	e.err = err
+	return
 }
 
 func (e BasicEntry[K, V]) Key() K {
@@ -81,6 +118,15 @@ func (e BasicEntry[K, V]) Key() K {
 
 func (e BasicEntry[K, V]) Val() V {
 	return e.val
+}
+
+func (e BasicEntry[K, V]) Seq() int {
+	return e.seq
+
+}
+
+func (e BasicEntry[K, V]) Time() time.Time {
+	return e.time
 }
 
 func (e BasicEntry[K, V]) State() State {
@@ -224,7 +270,7 @@ func (i *basicIndex[K, V]) Count() (int, error) {
 	return count, nil
 }
 
-func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, order Order, sf StateFilter, kf KeyFilter) (Paginer[K, V], chan error) {
+func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, order Order, f Filter) (Paginer[K, V], chan error) {
 	// TODO: cache all the bloc file content ?
 	// TODO: call all the index content ?
 	// FIXME : which order of idx files to iterate ?
@@ -257,20 +303,33 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 						return true
 					}
 
-					if sf != nil {
-						// If StateFilter does not match ignore the entry
-						ok := false
-						ok, loop = sf(s)
-						if !ok {
-							return true
+					if f != nil {
+						sf := f.StateFilter()
+						if sf != nil {
+							// If StateFilter does not match ignore the entry
+							ok, iloop := sf(s)
+							if !ok {
+								return true
+							}
+							loop = loop && iloop
 						}
-					}
-					if kf != nil {
-						// If KeyFilter does not match ignore the entry
-						ok := false
-						ok, loop = kf(key, s)
-						if !ok {
-							return true
+						tf := f.TimeFilter()
+						if tf != nil {
+							// If TimeFilter does not match ignore the entry
+							ok, iloop := tf(t)
+							if !ok {
+								return true
+							}
+							loop = loop && iloop
+						}
+						kf := f.KeyFilter()
+						if kf != nil {
+							// If KeyFilter does not match ignore the entry
+							ok, iloop := kf(key, s)
+							if !ok {
+								return true
+							}
+							loop = loop && iloop
 						}
 					}
 
@@ -316,30 +375,30 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 	return p, errChan
 }
 
-func (i *basicIndex[K, V]) Filter(suppliedKey K, order Order, sf StateFilter) (Paginer[K, V], chan error) {
-	return i.filter(suppliedKey, true, false, order, sf, nil)
+func (i *basicIndex[K, V]) Filter(suppliedKey K, order Order, f Filter) (Paginer[K, V], chan error) {
+	return i.filter(suppliedKey, true, false, order, f)
 }
 
-func (i *basicIndex[K, V]) HashedFilter(suppliedKey K, order Order, sf StateFilter) (Paginer[K, V], chan error) {
-	return i.filter(suppliedKey, true, true, order, sf, nil)
+func (i *basicIndex[K, V]) HashedFilter(suppliedKey K, order Order, f Filter) (Paginer[K, V], chan error) {
+	return i.filter(suppliedKey, true, true, order, f)
 }
 
-func (i *basicIndex[K, V]) FilterAll(order Order, sf StateFilter, kf KeyFilter) (Paginer[K, V], chan error) {
+func (i *basicIndex[K, V]) FilterAll(order Order, f Filter) (Paginer[K, V], chan error) {
 	var noKey K
-	return i.filter(noKey, false, false, order, sf, kf)
+	return i.filter(noKey, false, false, order, f)
 }
 
 func (i *basicIndex[K, V]) Paginate(key K, order Order) (Paginer[K, V], chan error) {
-	return i.filter(key, true, false, order, nil, nil)
+	return i.filter(key, true, false, order, nil)
 }
 
 func (i *basicIndex[K, V]) HashedPaginate(key K, order Order) (Paginer[K, V], chan error) {
-	return i.filter(key, true, true, order, nil, nil)
+	return i.filter(key, true, true, order, nil)
 }
 
 func (i *basicIndex[K, V]) PaginateAll(order Order) (Paginer[K, V], chan error) {
 	var noKey K
-	return i.filter(noKey, false, false, order, nil, nil)
+	return i.filter(noKey, false, false, order, nil)
 }
 
 func FixedSizeString(s int, k string) []byte {

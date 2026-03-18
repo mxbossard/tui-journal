@@ -83,7 +83,7 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt1, txt1)
 
-	// Add thirs dump
+	// Add third dump
 	d3, err := UseCaseDump0_Create(tmpDir, expectedSalt, expextedDevice, expectedTxt3)
 	assert.NoError(t, err)
 	assert.NotNil(t, d3)

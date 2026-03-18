@@ -3,6 +3,7 @@ package index
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/utilz/filez"
@@ -14,17 +15,21 @@ func TestBucketIndex_Add(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketIndex_Add")
 	defer os.RemoveAll(tmpDir)
 
+	expectedTime := time.Now()
+
 	bIdx, err := NewBucketIndex(tmpDir, "test")
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	err = bIdx.Add(Document, nil, "foo")
+	err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 }
 
 func TestBucketIndex_Count(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketIndex_Count")
 	defer os.RemoveAll(tmpDir)
+
+	expectedTime := time.Now()
 
 	bIdx, err := NewBucketIndex(tmpDir, "test")
 	assert.NoError(t, err)
@@ -34,23 +39,23 @@ func TestBucketIndex_Count(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	err = bIdx.Add(Document, nil, "foo")
+	err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	err = bIdx.Add(Document, nil, "bar")
+	err = bIdx.Add(Document, expectedTime, nil, "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(Document, nil, "baz")
+	err = bIdx.Add(Document, expectedTime, nil, "baz")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
-	err = bIdx.Add(Document, nil, "foo")
+	err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
@@ -62,16 +67,18 @@ func TestBucketIndex_PaginateAll(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketIndex_PaginateAll")
 	defer os.RemoveAll(tmpDir)
 
+	expectedTime := time.Now()
+
 	bIdx, err := NewBucketIndex(tmpDir, "test")
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(Document, nil, "foo")
+	err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(Document, nil, "bar")
+	err = bIdx.Add(Document, expectedTime, nil, "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(Document, nil, "baz")
+	err = bIdx.Add(Document, expectedTime, nil, "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(Document, nil, "foo")
+	err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 
 	p, errChan := bIdx.PaginateAll(idx.TopToBottom)

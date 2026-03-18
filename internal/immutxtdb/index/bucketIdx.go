@@ -61,7 +61,7 @@ func (i *BucketIndex0) preload() error {
 			return err
 		}
 
-		seq, _, _, _, err := i.encoder.DecodeLastWord(buf.Bytes()[0:n])
+		seq, _, _, _, _, err := i.encoder.DecodeLastWord(buf.Bytes()[0:n])
 		if err != nil {
 			return err
 		}

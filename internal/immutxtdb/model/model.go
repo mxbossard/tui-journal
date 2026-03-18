@@ -18,7 +18,6 @@ type BayerIdxEntry idx.BasicEntry[string, Layer]
 */
 
 type BucketUid string
-type HashedBucketUid [128]byte
 
 type Labels map[string]string
 
@@ -81,10 +80,12 @@ type BucketMetadata struct {
 	Labels  Labels
 }
 
+type HashedBucketUid [128]byte
+
 type Bucket struct {
 	Uid        BucketUid
 	Metadata   BucketMetadata
-	LayerRefIt iter.Seq[*LayerRef]
+	LayerRefIt iter.Seq2[error, idx.Entry[*HashedBucketUid, *LayerRef]]
 	//layers     []*Layer
 }
 

@@ -3,26 +3,26 @@ package idx
 import "time"
 
 // Return ok=true to select entry, return loop=false to stop iterating.
-type StateFilter func(s State) (ok bool, loop bool)
+type stateFilter func(s State) (ok bool, loop bool)
 
 // Return ok=true to select entry, return loop=false to stop iterating.
-type TimeFilter func(t time.Time) (ok bool, loop bool)
+type timeFilter func(t time.Time) (ok bool, loop bool)
 
 // Return ok=true to select entry, return loop=false to stop iterating.
-type KeyFilter func(k []byte, s State) (ok bool, loop bool)
+type keyFilter func(k []byte, s State) (ok bool, loop bool)
 
 type Filter interface {
-	StateFilter() StateFilter
-	TimeFilter() TimeFilter
-	KeyFilter() KeyFilter
+	StateFilter() stateFilter
+	TimeFilter() timeFilter
+	KeyFilter() keyFilter
 }
 
 type aggFilter struct {
 	Filter
 	logicalOr    bool
-	stateFilters []StateFilter
-	timeFilters  []TimeFilter
-	keyFilters   []KeyFilter
+	stateFilters []stateFilter
+	timeFilters  []timeFilter
+	keyFilters   []keyFilter
 }
 
 func (f *aggFilter) Add(filters ...*aggFilter) *aggFilter {
@@ -34,12 +34,14 @@ func (f *aggFilter) Add(filters ...*aggFilter) *aggFilter {
 	return f
 }
 
-func (f *aggFilter) AddStateFilter(filter StateFilter) *aggFilter {
-	f.stateFilters = append(f.stateFilters, filter)
+func (f *aggFilter) AddStateFilter(filter stateFilter) *aggFilter {
+	if filter != nil {
+		f.stateFilters = append(f.stateFilters, filter)
+	}
 	return f
 }
 
-func (f aggFilter) StateFilter() StateFilter {
+func (f aggFilter) StateFilter() stateFilter {
 	if len(f.stateFilters) == 0 {
 		return nil
 	}
@@ -60,12 +62,14 @@ func (f aggFilter) StateFilter() StateFilter {
 	}
 }
 
-func (f *aggFilter) AddTimeFilter(filter TimeFilter) *aggFilter {
-	f.timeFilters = append(f.timeFilters, filter)
+func (f *aggFilter) AddTimeFilter(filter timeFilter) *aggFilter {
+	if filter != nil {
+		f.timeFilters = append(f.timeFilters, filter)
+	}
 	return f
 }
 
-func (f aggFilter) TimeFilter() TimeFilter {
+func (f aggFilter) TimeFilter() timeFilter {
 	if len(f.timeFilters) == 0 {
 		return nil
 	}
@@ -86,12 +90,14 @@ func (f aggFilter) TimeFilter() TimeFilter {
 	}
 }
 
-func (f *aggFilter) AddKeyFilter(filter KeyFilter) *aggFilter {
-	f.keyFilters = append(f.keyFilters, filter)
+func (f *aggFilter) AddKeyFilter(filter keyFilter) *aggFilter {
+	if filter != nil {
+		f.keyFilters = append(f.keyFilters, filter)
+	}
 	return f
 }
 
-func (f aggFilter) KeyFilter() KeyFilter {
+func (f aggFilter) KeyFilter() keyFilter {
 	if len(f.keyFilters) == 0 {
 		return nil
 	}
@@ -146,6 +152,30 @@ func BetweenFilter(a, b time.Time) *aggFilter {
 	}
 	f := AndFilter(BeforeFilter(b), AfterFilter(a))
 	return f
+}
+
+func TimeFilter(tf timeFilter) *aggFilter {
+	filter := &aggFilter{logicalOr: false}
+	if tf != nil {
+		filter.AddTimeFilter(tf)
+	}
+	return filter
+}
+
+func StateFilter(sf stateFilter) *aggFilter {
+	filter := &aggFilter{logicalOr: false}
+	if sf != nil {
+		filter.AddStateFilter(sf)
+	}
+	return filter
+}
+
+func KeyFilter(kf keyFilter) *aggFilter {
+	filter := &aggFilter{logicalOr: false}
+	if kf != nil {
+		filter.AddKeyFilter(kf)
+	}
+	return filter
 }
 
 type filterBuilder struct {

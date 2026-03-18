@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	LayerIdxStateSize = 8
+	LayerIdxStateSize = 16
 	LayerIdxKeySize   = 128
 	LayerIdxDataSize  = 200
 	LayerIdxPageSize  = 10
@@ -23,38 +23,36 @@ var (
 	layerEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("layer000")))
 )
 
-type HashedBucketUid [LayerIdxKeySize]byte
-
-func ByteSliceToBucketUid(uid []byte) HashedBucketUid {
-	var a HashedBucketUid
+func ByteSliceToBucketUid(uid []byte) model.HashedBucketUid {
+	var a model.HashedBucketUid
 	copy(a[:], uid)
 	return a
 }
 
-func StringToBucketUid(uid string) HashedBucketUid {
+func StringToBucketUid(uid string) model.HashedBucketUid {
 	return ByteSliceToBucketUid([]byte(uid))
 }
 
 type BucketUidSerializer struct {
-	serialize.Serializer[HashedBucketUid]
+	serialize.Serializer[model.HashedBucketUid]
 }
 
-func (s BucketUidSerializer) Serialize(i *HashedBucketUid, o []byte) error {
+func (s BucketUidSerializer) Serialize(i *model.HashedBucketUid, o []byte) error {
 	for k := range len(i) {
 		o[k] = (*i)[k]
 	}
 	return nil
 }
 
-func (s BucketUidSerializer) Deserialize(i []byte) (*HashedBucketUid, error) {
-	var o HashedBucketUid
+func (s BucketUidSerializer) Deserialize(i []byte) (*model.HashedBucketUid, error) {
+	var o model.HashedBucketUid
 	for k := 0; k < len(o) && k < len(i); k++ {
 		(o)[k] = i[k]
 	}
 	return &o, nil
 }
 
-type LayerIndex idx.Index[*HashedBucketUid, *model.LayerRef]
+type LayerIndex idx.Index[*model.HashedBucketUid, *model.LayerRef]
 
 // (KEY: BUCKET_UID, STATE, VAL: LayerRef)
 func NewLayerIndex(indexDir, device, salt string) (LayerIndex, error) {
