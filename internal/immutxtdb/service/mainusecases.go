@@ -165,7 +165,10 @@ func GetBlocReader(ref *model.BlocRef) (*filez.Bloc, error) {
 		return nil, err
 	}
 	bloc, err := bf.Get(ref.BlocId)
-	return bloc, err
+	if err != nil {
+		return nil, fmt.Errorf("error getting bloc #%d of file [%s]: %w", ref.BlocId, ref.BlocsFilepath, err)
+	}
+	return bloc, nil
 }
 
 // FIXME: NEED to synchronize blocs writes & reads in a dedicated service (which may cache BlocsFile).
@@ -190,10 +193,11 @@ func readLayerDiff(ref *model.LayerRef) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	b := make([]byte, ref.Pos+ref.Len)
+	length := ref.Pos + ref.Len
+	b := make([]byte, length)
 	n, err := bloc.Read(b)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error reading diff of lenth %d: %w", length, err)
 	}
 	txt := string(b[ref.Pos:n])
 	// fmt.Printf("read layer diff: [%s] from pos: %d of len: %d\n", txt, ref.Pos, n-ref.Pos)

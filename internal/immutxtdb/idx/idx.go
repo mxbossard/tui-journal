@@ -295,7 +295,14 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 		//panic("not implemented yet")
 	End:
 		for _, bf := range idxFiles {
-			for b := range bf.All(filez.BlocOrdering(order), errChan) {
+			for err, b := range bf.All(filez.BlocOrdering(order)) {
+				if err != nil {
+					var k K
+					var v V
+					if !push(nil, k, v, err) {
+						return
+					}
+				}
 				loop := true
 				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
 					if err != nil {

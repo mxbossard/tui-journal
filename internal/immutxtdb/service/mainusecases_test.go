@@ -27,13 +27,13 @@ func TestUseCaseDump0_Create(t *testing.T) {
 	assert.Equal(t, d.Metadata.Created, d.Metadata.Updated)
 	assert.NotNil(t, d.LayerRefIt)
 	k := 0
-	for l := range d.LayerRefIt {
+	for _, l := range d.LayerRefIt {
 		assert.NotNil(t, l)
 		k++
 	}
 	assert.Equal(t, 1, k)
 	k = 0
-	for l := range d.LayerRefIt {
+	for _, l := range d.LayerRefIt {
 		assert.NotNil(t, l)
 		k++
 	}
