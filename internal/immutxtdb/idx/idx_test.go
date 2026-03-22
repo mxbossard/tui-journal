@@ -29,7 +29,7 @@ func TestBasicIndex_Add(t *testing.T) {
 
 	assert.Implements(t, (*Index[string, string])(nil), bIdx)
 
-	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
 }
 
@@ -52,23 +52,23 @@ func TestBasicIndex_Count(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
+	_, err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
+	_, err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
-	err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
@@ -95,11 +95,11 @@ func TestBasicIndex_CountReopen(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
+	_, err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
+	_, err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
@@ -130,13 +130,13 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
+	_, err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
+	_, err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
 	p, errChan := bIdx.PaginateAll(TopToBottom)
@@ -200,13 +200,13 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 	bIdx, err := NewBasicIndex(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
+	_, err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
+	_, err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
 	// Open a second Idx
@@ -251,13 +251,13 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
+	_, err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
+	_, err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
 	pk1, errChan := bIdx.Paginate("k1", TopToBottom)
@@ -341,13 +341,13 @@ func TestBasicIndex_Filter(t *testing.T) {
 	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(expectedState1, time2, "k1", "foo")
+	_, err = bIdx.Add(expectedState1, time2, "k1", "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState1, time3, "k2", "bar")
+	_, err = bIdx.Add(expectedState1, time3, "k2", "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState2, time4, "k3", "baz")
+	_, err = bIdx.Add(expectedState2, time4, "k3", "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(expectedState3, time5, "k1", "pif")
+	_, err = bIdx.Add(expectedState3, time5, "k1", "pif")
 	assert.NoError(t, err)
 
 	p1, errChan := bIdx.FilterAll(TopToBottom, BeforeFilter(time4))

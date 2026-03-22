@@ -111,6 +111,9 @@ DB to store text documents
 - Can be squashed
 - Can be snapshoted
 - ? Where is it stored ? => in an index file
+- Have metadata (uid, name, timings, size, ...)
+- Metadata should be fast readable without reading data (different index ?)
+- Metadata should be decryptable and cached independently of data.
 
 ### Layer
 - Layer ref a content, a version & a metadata

@@ -21,7 +21,7 @@ func TestBucketIndex_Add(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	err = bIdx.Add(Document, expectedTime, nil, "foo")
+	_, err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 }
 
@@ -39,23 +39,23 @@ func TestBucketIndex_Count(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
-	err = bIdx.Add(Document, expectedTime, nil, "foo")
+	_, err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
-	err = bIdx.Add(Document, expectedTime, nil, "bar")
+	_, err = bIdx.Add(Document, expectedTime, nil, "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(Document, expectedTime, nil, "baz")
+	_, err = bIdx.Add(Document, expectedTime, nil, "baz")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
-	err = bIdx.Add(Document, expectedTime, nil, "foo")
+	_, err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 
 	count, err = bIdx.Count()
@@ -72,13 +72,13 @@ func TestBucketIndex_PaginateAll(t *testing.T) {
 	bIdx, err := NewBucketIndex(tmpDir, "test")
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
-	err = bIdx.Add(Document, expectedTime, nil, "foo")
+	_, err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
-	err = bIdx.Add(Document, expectedTime, nil, "bar")
+	_, err = bIdx.Add(Document, expectedTime, nil, "bar")
 	assert.NoError(t, err)
-	err = bIdx.Add(Document, expectedTime, nil, "baz")
+	_, err = bIdx.Add(Document, expectedTime, nil, "baz")
 	assert.NoError(t, err)
-	err = bIdx.Add(Document, expectedTime, nil, "foo")
+	_, err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 
 	p, errChan := bIdx.PaginateAll(idx.TopToBottom)

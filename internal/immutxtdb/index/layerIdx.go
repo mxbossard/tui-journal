@@ -37,11 +37,12 @@ type BucketUidSerializer struct {
 	serialize.Serializer[model.HashedBucketUid]
 }
 
-func (s BucketUidSerializer) Serialize(i *model.HashedBucketUid, o []byte) error {
-	for k := range len(i) {
+func (s BucketUidSerializer) Serialize(i *model.HashedBucketUid, o []byte) (int, error) {
+	n := len(i)
+	for k := range n {
 		o[k] = (*i)[k]
 	}
-	return nil
+	return n, nil
 }
 
 func (s BucketUidSerializer) Deserialize(i []byte) (*model.HashedBucketUid, error) {

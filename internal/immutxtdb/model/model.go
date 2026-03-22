@@ -93,7 +93,11 @@ func (b Bucket) Project() (txt string, err error) {
 	panic("not implemented yet")
 }
 
-func (b Bucket) Save(content string, labels Labels) error {
+func (b Bucket) Write(content []byte, labels Labels) error {
+	panic("not implemented yet")
+}
+
+func (b Bucket) WriteString(content string, labels Labels) error {
 	panic("not implemented yet")
 }
 

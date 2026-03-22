@@ -22,15 +22,15 @@ type gobSerializer[T any] struct {
 	serialize.Serializer[T]
 }
 
-func (s gobSerializer[T]) Serialize(i *T, o []byte) error {
+func (s gobSerializer[T]) Serialize(i *T, o []byte) (int, error) {
 	// FIXME: use rotating hash ?
 	bw := inoutz.NewByteSliceWriter(o)
 	var err error
 	if i != nil {
 		enc := gob.NewEncoder(bw)
-		err = enc.Encode(i)
+		err = enc.Encode(*i)
 	}
-	return err
+	return bw.Len(), err
 
 }
 

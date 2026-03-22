@@ -62,7 +62,7 @@ func CatState(size int, states ...State) State {
 // FIXME: Paginer SHOULD return KV Entries also embedding seq, time and state ?
 type Index[K comparable, V any] interface {
 	// Add a KV entry
-	Add(s State, t time.Time, key K, val V) error
+	Add(s State, t time.Time, key K, val V) (Entry[K, V], error)
 	// Return KV entries count
 	Count() (int, error)
 	// Paginate all KV entries matching supplied key & Filter
@@ -86,6 +86,7 @@ type Void *void
 
 type Entry[K comparable, V any] interface {
 	Key() K
+	BytesKey() []byte
 	Val() V
 	Seq() int
 	Time() time.Time
@@ -94,26 +95,32 @@ type Entry[K comparable, V any] interface {
 }
 
 type BasicEntry[K comparable, V any] struct {
-	key   K
-	val   V
-	seq   int
-	time  time.Time
-	state State
-	err   error
+	key      K
+	val      V
+	seq      int
+	time     time.Time
+	state    State
+	err      error
+	bytesKey []byte
 }
 
-func NewEntry[K comparable, V any](key K, val V, seq int, time time.Time, state State, err error) (e BasicEntry[K, V]) {
+func NewEntry[K comparable, V any](key K, val V, seq int, time time.Time, state State, err error, bKey []byte) (e BasicEntry[K, V]) {
 	e.key = key
 	e.val = val
 	e.seq = seq
 	e.time = time
 	e.state = state
 	e.err = err
+	e.bytesKey = bKey
 	return
 }
 
 func (e BasicEntry[K, V]) Key() K {
 	return e.key
+}
+
+func (e BasicEntry[K, V]) BytesKey() []byte {
+	return e.bytesKey
 }
 
 func (e BasicEntry[K, V]) Val() V {
@@ -207,16 +214,16 @@ func (i *basicIndex[K, V]) selectDeviceBlocFile(s State, k K) *filez.BlocsFile {
 	return i.deviceIdxFiles[0]
 }
 
-func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) error {
+func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], error) {
 	i.Lock()
 	defer i.Unlock()
 
 	key := make([]byte, i.encoder.KeySize())
 	var err error
 	if i.keySerializer != nil {
-		err = i.keySerializer.Serialize(k, key)
+		_, err = i.keySerializer.Serialize(k, key)
 		if err != nil {
-			return fmt.Errorf("error serializing key: %w", err)
+			return nil, fmt.Errorf("error serializing key: %w", err)
 		}
 	}
 
@@ -226,37 +233,37 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) error {
 
 	// TODO: use 2 optionals RotatingHasher to hash key and value
 	val := make([]byte, i.encoder.ValSize())
-	err = i.valSerializer.Serialize(v, val)
+	_, err = i.valSerializer.Serialize(v, val)
 	if err != nil {
-		return fmt.Errorf("error serializing val: %w", err)
+		return nil, fmt.Errorf("error serializing val: %w", err)
 	}
 
 	// Rotating Hash
 	if i.keyHasher != nil {
 		key, err = i.keyHasher(seq, key)
 		if err != nil {
-			return fmt.Errorf("error hashing key: %w", err)
+			return nil, fmt.Errorf("error hashing key: %w", err)
 		}
 	}
 	if i.valHasher != nil {
 		val, err = i.valHasher(seq, val)
 		if err != nil {
-			return fmt.Errorf("error hashing val: %w", err)
+			return nil, fmt.Errorf("error hashing val: %w", err)
 		}
 	}
 
 	entry, err := i.encoder.Encode(seq, t, s, key, val)
 	if err != nil {
-		return fmt.Errorf("error encoding entry: %w", err)
+		return nil, fmt.Errorf("error encoding entry: %w", err)
 	}
 
 	//fmt.Printf("writing encoded content (#%d, uid: %s): %v\n", seq, uid, entry)
 	_, err = bf.Write(entry)
 	if err != nil {
-		return fmt.Errorf("error writing entry: %w", err)
+		return nil, fmt.Errorf("error writing entry: %w", err)
 	}
 	i.seqs[bfName] = seq + 1
-	return nil
+	return NewEntry(k, v, seq, t, s, nil, key), nil
 }
 
 func (i *basicIndex[K, V]) Count() (int, error) {
@@ -282,7 +289,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 		filteringK = make([]byte, i.encoder.KeySize())
 		var err error
 		if i.keySerializer != nil {
-			err = i.keySerializer.Serialize(suppliedKey, filteringK)
+			_, err = i.keySerializer.Serialize(suppliedKey, filteringK)
 			if err != nil {
 				errChan <- err
 				return nil, errChan

@@ -234,7 +234,7 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 	// FIXME: 1- Check if bucket already exists !
 
 	// 2- Create a bucket
-	err = idxService.bucketIdx.Add(dumpState, now, nil, name)
+	_, err = idxService.bucketIdx.Add(dumpState, now, nil, name)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +272,10 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 
 	// 5- Create a layer idx entry
 	hUid := model.HashedBucketUid(index.StringToBucketUid(name))
-	idxService.layerIdx.Add(dumpRootLayerState, now, &hUid, rootLayerRef)
+	e, err := idxService.layerIdx.Add(dumpRootLayerState, now, &hUid, rootLayerRef)
+	if err != nil {
+		return nil, err
+	}
 
 	// rootLayer := model.Layer{
 	// 	Metadata: model.LayerMetadata{
@@ -285,7 +288,7 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 
 	// 6- Forge the root layer iterator
 	var layerRefIt iter.Seq2[error, idx.Entry[*model.HashedBucketUid, *model.LayerRef]] = func(yield func(error, idx.Entry[*model.HashedBucketUid, *model.LayerRef]) bool) {
-		entry := idx.NewEntry(&hUid, rootLayerRef, -1, now, dumpRootLayerState, nil)
+		entry := idx.NewEntry(&hUid, rootLayerRef, -1, now, dumpRootLayerState, nil, e.BytesKey())
 		yield(nil, entry)
 	}
 

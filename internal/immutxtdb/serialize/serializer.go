@@ -14,7 +14,7 @@ var NotMatchingEncoder = errors.New("encoder dos not match")
 var NotAsciiText = errors.New("supplied text is out of ASCII table")
 
 type Serializer[T any] interface {
-	Serialize(T, []byte) error
+	Serialize(T, []byte) (int, error)
 	Deserialize([]byte) (T, error)
 }
 
@@ -22,9 +22,9 @@ type ByteSliceSerializer struct {
 	Serializer[[]byte]
 }
 
-func (s ByteSliceSerializer) Serialize(i, o []byte) error {
+func (s ByteSliceSerializer) Serialize(i, o []byte) (int, error) {
 	copy(o, i)
-	return nil
+	return len(i), nil
 }
 
 func (s ByteSliceSerializer) Deserialize(i []byte) ([]byte, error) {
@@ -35,11 +35,11 @@ type ByteArray128Serializer struct {
 	Serializer[*[128]byte]
 }
 
-func (s ByteArray128Serializer) Serialize(i *[128]byte, o []byte) error {
+func (s ByteArray128Serializer) Serialize(i *[128]byte, o []byte) (int, error) {
 	for k := range 128 {
 		o[k] = (*i)[k]
 	}
-	return nil
+	return len(i), nil
 }
 
 func (s ByteArray128Serializer) Deserialize(i []byte) (*[128]byte, error) {
@@ -68,13 +68,13 @@ type AsciiSerializer struct {
 	Serializer[string]
 }
 
-func (s AsciiSerializer) Serialize(i string, o []byte) error {
+func (s AsciiSerializer) Serialize(i string, o []byte) (int, error) {
 	if !IsASCII(i) {
-		return NotAsciiText
+		return 0, NotAsciiText
 	}
 	n := copy(o, i)
 	o[n] = NullChar[0]
-	return nil
+	return n + 1, nil
 }
 
 func (s AsciiSerializer) Deserialize(b []byte) (string, error) {
@@ -86,12 +86,26 @@ type TimeSerializer struct {
 	Serializer[time.Time]
 }
 
-func (s TimeSerializer) Serialize(i time.Time, o []byte) error {
+func (s TimeSerializer) Serialize(i time.Time, o []byte) (int, error) {
 	binary.AppendVarint(o, i.Unix())
-	return nil
+	return 8, nil
 }
 
 func (s TimeSerializer) Deserialize(i []byte) (time.Time, error) {
 	t, _ := binary.Varint(i[0:8])
 	return time.Unix(t, 0), nil
+}
+
+type StructSerializer[T any] struct {
+	Serializer[T]
+}
+
+func (s StructSerializer[T]) Serialize(i *T, o []byte) (int, error) {
+	n, err := binary.Encode(o, binary.BigEndian, &i)
+	return n, err
+}
+
+func (s StructSerializer[T]) Deserialize(i []byte) (o *T, err error) {
+	_, err = binary.Decode(i, binary.BigEndian, o)
+	return o, err
 }
