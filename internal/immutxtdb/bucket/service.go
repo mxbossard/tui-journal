@@ -5,6 +5,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/files"
@@ -42,30 +43,68 @@ type BucketNameIndex idx.Index[string, BucketUid]
 type HeaderRefIndex idx.Index[BucketUid, *HeaderRef]
 type BucketRefIndex idx.Index[HashedBucketUid, *BucketRef]
 
+type BucketUidSerializer struct {
+	serialize.Serializer[BucketUid]
+}
+
+func (s BucketUidSerializer) Serialize(i BucketUid, o []byte) (int, error) {
+	for k := range len(i) {
+		o[k] = (i)[k]
+	}
+	return len(i), nil
+}
+
+func (s BucketUidSerializer) Deserialize(i []byte) (BucketUid, error) {
+	var o BucketUid
+	for k := 0; k < len(o) && k < len(i); k++ {
+		o[k] = i[k]
+	}
+	return o, nil
+}
+
+type HashedBucketUidSerializer struct {
+	serialize.Serializer[HashedBucketUid]
+}
+
+func (s HashedBucketUidSerializer) Serialize(i HashedBucketUid, o []byte) (int, error) {
+	for k := range len(i) {
+		o[k] = (i)[k]
+	}
+	return len(i), nil
+}
+
+func (s HashedBucketUidSerializer) Deserialize(i []byte) (HashedBucketUid, error) {
+	var o HashedBucketUid
+	for k := 0; k < len(o) && k < len(i); k++ {
+		o[k] = i[k]
+	}
+	return o, nil
+}
+
 // (KEY: string, VAL: BucketUid)
 func NewBucketNameIndex(indexDir, device string) (BucketNameIndex, error) {
 	enc := idx.NewAsciiEncoder(0, BucketNameIdxStateSize, BucketNameIdxKeySize, BucketNameIdxDataSize)
 	keySer := serialize.AsciiSerializer{}
-	//valSer := nil
-	return idx.NewBasicIndex[string, BucketUid](indexDir, BucketNameIdxQualifier, device, keySer, nil,
+	valSer := BucketUidSerializer{}
+	return idx.NewBasicIndex(indexDir, BucketNameIdxQualifier, device, keySer, valSer,
 		nil, nil, enc, BucketNameIdxPageSize)
 }
 
 // (KEY: RH(BucketUid), VAL: HeaderRef)
 func NewHeaderRefIndex(indexDir, device, salt string) (HeaderRefIndex, error) {
 	enc := idx.NewAsciiEncoder(0, HeaderRefIdxStateSize, HeaderRefIdxKeySize, HeaderRefIdxDataSize)
-	//keySer := serialize.AsciiSerializer{}
+	keySer := BucketUidSerializer{}
 	valSer := serialize.StructSerializer[HeaderRef]{}
-	return idx.NewBasicIndex[BucketUid, *HeaderRef](indexDir, HeaderRefIdxQualifier, device, nil, valSer,
+	return idx.NewBasicIndex(indexDir, HeaderRefIdxQualifier, device, keySer, valSer,
 		index.RotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize)
 }
 
 // (KEY: H(BucketUid), VAL: BucketRef)
 func NewBucketRefIndex(indexDir, device string) (BucketRefIndex, error) {
 	enc := idx.NewAsciiEncoder(0, BucketRefIdxStateSize, BucketRefIdxKeySize, BucketRefIdxDataSize)
-	// keySer := serialize.AsciiSerializer{}
+	keySer := HashedBucketUidSerializer{}
 	valSer := serialize.StructSerializer[BucketRef]{}
-	return idx.NewBasicIndex[HashedBucketUid, *BucketRef](indexDir, BucketRefIdxQualifier, device, nil, valSer,
+	return idx.NewBasicIndex(indexDir, BucketRefIdxQualifier, device, keySer, valSer,
 		nil, nil, enc, BucketRefIdxPageSize)
 }
 
@@ -134,6 +173,7 @@ func (s *bucketService) New(name string, labels Labels) *Bucket {
 	// FIXME: check if uid already exists
 
 	b := Bucket{
+		Mutex:   &sync.Mutex{},
 		service: s,
 		header: Header{
 			Uid:     uid,
@@ -283,5 +323,11 @@ func storeMetadata(dir, device string, m *Metadata) (*MetadataRef, error) {
 }
 
 func storeLayer(dir, device string, data []byte) (*LayerRef, error) {
-	panic("not implemented yet")
+	blocRefPart, err := files.StoreBytes(dir, device, "layerData", data)
+	if err != nil {
+		return nil, err
+	}
+
+	ref := LayerRef(*blocRefPart)
+	return &ref, nil
 }
