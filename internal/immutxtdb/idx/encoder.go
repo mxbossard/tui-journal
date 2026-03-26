@@ -22,10 +22,10 @@ type IdxEncoder interface {
 	Setup(header []byte) error
 	Encode(seq int, t time.Time, s State, key []byte, val []byte) ([]byte, error)
 	// Decode first word in supplied byte slice.
-	Decode([]byte) (seq int, t time.Time, s State, key []byte, val []byte, err error)
+	Decode(data []byte) (seq int, t time.Time, s State, key []byte, val []byte, err error)
 	// Decode last word in supplied byte slice.
-	DecodeLastWord([]byte) (seq int, t time.Time, s State, key []byte, val []byte, err error)
-	DecodeAll(Order, []byte, func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool)
+	DecodeLastWord(data []byte) (seq int, t time.Time, s State, key []byte, val []byte, err error)
+	DecodeAll(order Order, data []byte, callback func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool)
 }
 
 type basicIdxEncoder struct {

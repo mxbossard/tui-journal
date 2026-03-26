@@ -36,7 +36,7 @@ func (p page[K, V]) Err() error {
 	return p.err
 }
 
-// Entries iterator return (position in index, entry[K, V])
+// Entries iterator return (position in page, entry[K, V])
 func (p *page[K, V]) All() iter.Seq2[int, Entry[K, V]] {
 	return func(yield func(int, Entry[K, V]) bool) {
 		for pos, e := range p.entries {
@@ -67,6 +67,7 @@ type paginer[K comparable, V any] struct {
 	endReached   bool
 }
 
+// Build a page, attempt to complete it all (load page size items)
 func (p *paginer[K, V]) buildPage(number int) *page[K, V] {
 	if p.endReached {
 		return nil
@@ -74,12 +75,13 @@ func (p *paginer[K, V]) buildPage(number int) *page[K, V] {
 	var entries []Entry[K, V]
 	// fmt.Printf("building page #%d ...\n", number)
 	var err error
-	for item := range p.pushed {
-		if item.Error() != nil {
-			err = item.Error()
+	for entry := range p.pushed {
+		if entry.Error() != nil {
+			err = entry.Error()
 			break
 		}
-		entries = append(entries, item)
+		// fmt.Printf("adding entry %s in page %d ...\n", entry, number)
+		entries = append(entries, entry)
 		if len(entries) >= p.pageSize {
 			break
 		}
@@ -152,6 +154,7 @@ func (p *paginer[K, V]) All() iter.Seq2[error, Entry[K, V]] {
 		for {
 			page, ok, err := p.Next()
 			for _, entry := range page.All() {
+				// fmt.Printf("supplying entry %s in pagine %d ...\n", entry, page.number)
 				if !yield(err, entry) {
 					return
 				}
@@ -163,7 +166,11 @@ func (p *paginer[K, V]) All() iter.Seq2[error, Entry[K, V]] {
 	}
 }
 
-func NewPaginer[K comparable, V any](pageSize, preloadPageCount int, pusher func(func(State, K, V, error) bool)) *paginer[K, V] {
+// Build a Paginer.
+// Current implem preload all page items (pageSize & preloadPageCount are important).
+// pusher func must be implemented to push each items to paginer using push function.
+// if push function return false pusher func MUST stop.
+func NewPaginer[K comparable, V any](pageSize, preloadPageCount int, pusher func(push func(e Entry[K, V]) bool)) *paginer[K, V] {
 	p := &paginer[K, V]{
 		//errChan:      errChan,
 		pageSize:     pageSize,
@@ -173,10 +180,10 @@ func NewPaginer[K comparable, V any](pageSize, preloadPageCount int, pusher func
 		current:      -1,
 	}
 	go func() {
-		pusher(func(s State, k K, v V, err error) bool {
-			e := BasicEntry[K, V]{key: k, val: v, state: s, err: err}
-			p.pushed <- &e
-			return !p.closed && err == nil
+		pusher(func(e Entry[K, V]) bool {
+			p.pushed <- e
+			// fmt.Printf("pushed entry %s in paginer\n", e)
+			return !p.closed && e.Error() == nil
 		})
 		// When all items were pushed close the channel
 		close(p.pushed)

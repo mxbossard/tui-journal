@@ -12,7 +12,7 @@ import (
 func TestPaginer_Empty(t *testing.T) {
 	expectedPageSize := 3
 	expectedPreloadCount := 2
-	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(State, int, string, error) bool) {
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
 		// Nothing to paginate
 	})
 	require.NotNil(t, p)
@@ -33,13 +33,14 @@ func TestPaginer_AllIterator(t *testing.T) {
 
 	k := 0
 	var expectedMessages []string
-	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(State, int, string, error) bool) {
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
 		for {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
 			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			if !push(nil, k, msg, nil) {
-				// fmt.Printf("breaked!\n")
+			e := NewEntry(k, msg, k, time.Now(), nil, nil, nil)
+			if !push(e) {
+				// fmt.Printf("breaked!\n")S
 				break
 			}
 			k++
@@ -67,14 +68,19 @@ func TestPaginer_NextPages(t *testing.T) {
 	expectedPreloadCount := 2
 	expectedCount := 10
 
+	a := 5
+	b := &a
+	assert.Equal(t, a, *b, "int ptr is a bad idea")
+
 	k := 0
 	var expectedMessages []string
-	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(State, int, string, error) bool) {
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
 		for {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
-			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			if !push([]byte("foobarba"), k, msg, nil) {
+			e := NewEntry(k, msg, k, time.Now(), []byte("foobarba"), nil, nil)
+			fmt.Printf("pushing entry: [%s] ...\n", e)
+			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break
 			}
@@ -102,11 +108,13 @@ func TestPaginer_NextPages(t *testing.T) {
 			assert.False(t, ok, "Next() MUST return false for last page (i: %d, n: %d)", i, n)
 		}
 
-		for i, item := range page.All() {
+		j := 0
+		for k, item := range page.All() {
+			assert.Equal(t, j, k, "bad item pos in page (page: %d)", page.Number())
 			assert.Equal(t, n, item.Key(), "bad item key (page: %d)", page.Number())
 			assert.Equal(t, expectedMessages[n], item.Val(), "bad item value (page: %d)", page.Number())
-			assert.Equal(t, n%expectedPageSize, i, "bad item order in page (page: %d)", page.Number())
 			n++
+			j++
 		}
 
 		i++
@@ -127,12 +135,13 @@ func TestPaginer_PrevPages(t *testing.T) {
 
 	k := 0
 	var expectedMessages []string
-	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(State, int, string, error) bool) {
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
 		for {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
 			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			if !push(nil, k, msg, nil) {
+			e := NewEntry(k, msg, k, time.Now(), nil, nil, nil)
+			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break
 			}
@@ -187,7 +196,7 @@ func TestPaginer_WithErrors(t *testing.T) {
 	expectedError := fmt.Errorf("blocking error")
 	k := 0
 	var expectedMessages []string
-	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(State, int, string, error) bool) {
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
 		for {
 			var err error
 			if k >= expectedCountBeforeError {
@@ -196,7 +205,8 @@ func TestPaginer_WithErrors(t *testing.T) {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
 			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			if !push(nil, k, msg, err) {
+			e := NewEntry(k, msg, k, time.Now(), nil, err, nil)
+			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break
 			}
@@ -231,12 +241,13 @@ func TestPaginer_Preloading(t *testing.T) {
 
 	k := 0
 	var expectedMessages []string
-	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(State, int, string, error) bool) {
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
 		for {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
 			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			if !push(nil, k, msg, nil) {
+			e := NewEntry(k, msg, k, time.Now(), nil, nil, nil)
+			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break
 			}

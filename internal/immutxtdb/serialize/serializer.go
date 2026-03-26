@@ -3,9 +3,12 @@ package serialize
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"time"
 	"unicode"
+
+	"github.com/mxbossard/utilz/inoutz"
 )
 
 var NullChar = []byte{0}
@@ -31,6 +34,44 @@ func (s ByteSliceSerializer) Deserialize(i []byte) ([]byte, error) {
 	return i, nil
 }
 
+type ByteArray16Serializer struct {
+	Serializer[*[16]byte]
+}
+
+func (s ByteArray16Serializer) Serialize(i *[16]byte, o []byte) (int, error) {
+	for k := range 16 {
+		o[k] = (*i)[k]
+	}
+	return len(i), nil
+}
+
+func (s ByteArray16Serializer) Deserialize(i []byte) (*[16]byte, error) {
+	var o [16]byte
+	for k := 0; k < 16 && k < len(i); k++ {
+		o[k] = i[k]
+	}
+	return &o, nil
+}
+
+type ByteArray32Serializer struct {
+	Serializer[*[32]byte]
+}
+
+func (s ByteArray32Serializer) Serialize(i *[32]byte, o []byte) (int, error) {
+	for k := range 32 {
+		o[k] = (*i)[k]
+	}
+	return len(i), nil
+}
+
+func (s ByteArray32Serializer) Deserialize(i []byte) (*[32]byte, error) {
+	var o [32]byte
+	for k := 0; k < 32 && k < len(i); k++ {
+		o[k] = i[k]
+	}
+	return &o, nil
+}
+
 type ByteArray128Serializer struct {
 	Serializer[*[128]byte]
 }
@@ -44,7 +85,6 @@ func (s ByteArray128Serializer) Serialize(i *[128]byte, o []byte) (int, error) {
 
 func (s ByteArray128Serializer) Deserialize(i []byte) (*[128]byte, error) {
 	var o [128]byte
-	// copy(o[:], i)
 	for k := 0; k < 128 && k < len(i); k++ {
 		o[k] = i[k]
 	}
@@ -101,11 +141,19 @@ type StructSerializer[T any] struct {
 }
 
 func (s StructSerializer[T]) Serialize(i *T, o []byte) (int, error) {
-	n, err := binary.Encode(o, binary.BigEndian, &i)
-	return n, err
+	bw := inoutz.NewByteSliceWriter(o)
+	var err error
+	if i != nil {
+		enc := gob.NewEncoder(bw)
+		err = enc.Encode(*i)
+	}
+	return bw.Len(), err
 }
 
 func (s StructSerializer[T]) Deserialize(i []byte) (o *T, err error) {
-	_, err = binary.Decode(i, binary.BigEndian, o)
-	return o, err
+	buf := bytes.NewBuffer(i)
+	dec := gob.NewDecoder(buf)
+	var l T
+	err = dec.Decode(&l)
+	return &l, err
 }

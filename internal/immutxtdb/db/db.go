@@ -4,7 +4,6 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/index"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
-	"github.com/mxbossard/utilz/errorz"
 )
 
 type Query struct {
@@ -23,7 +22,10 @@ func RotatingHashString(s string) *model.HashedBucketUid {
 
 func (d *DB) Bucket(uid string) (*model.Bucket, error) {
 	rhUid := RotatingHashString(uid)
-	p, errChan := d.layerIdx.Paginate(rhUid, idx.BottomToTop)
+	p, err := d.layerIdx.Paginate(rhUid, idx.BottomToTop)
+	if err != nil {
+		return nil, err
+	}
 
 	var layers []*model.LayerRef
 	for page, ok, err := p.Next(); ok; {
@@ -38,8 +40,7 @@ func (d *DB) Bucket(uid string) (*model.Bucket, error) {
 
 	panic("not implemented yet")
 	b := &model.Bucket{Uid: model.BucketUid(uid)}
-
-	return b, errorz.ConsumedAggregated(errChan)
+	return b, nil
 }
 
 func (d DB) Query(query Query) ([]model.Bucket, error) {

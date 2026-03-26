@@ -31,7 +31,6 @@ func (s gobSerializer[T]) Serialize(i *T, o []byte) (int, error) {
 		err = enc.Encode(*i)
 	}
 	return bw.Len(), err
-
 }
 
 func (s gobSerializer[T]) Deserialize(b []byte) (*T, error) {

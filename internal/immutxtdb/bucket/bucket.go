@@ -5,8 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/files"
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
+	"github.com/mxbossard/utilz/filez"
 )
 
 type BucketUid [16]byte
@@ -20,7 +19,7 @@ type Metadata struct {
 }
 
 type Layer struct {
-	Metadata   Metadata
+	Metadata   *Metadata
 	Content    []byte
 	Commited   bool
 	Snapshoted bool
@@ -39,13 +38,13 @@ type Header struct {
 // Match SHA256 ?
 type HashedBucketUid [32]byte
 
-type MetadataRef files.BlocRefPart
-type LayerRef files.BlocRefPart
-type HeaderRef files.BlocRefPart
+type MetadataRef filez.BlocPart
+type LayerRef filez.BlocPart
+type HeaderRef filez.BlocPart
 
 type BucketRef struct {
-	metadataRef MetadataRef
-	layerRef    LayerRef
+	MetadataRef MetadataRef
+	LayerRef    LayerRef
 }
 
 type Bucket struct {
@@ -54,12 +53,25 @@ type Bucket struct {
 
 	header Header
 	// Last layer Metadata
-	metadata   *Metadata
-	layerRefIt iter.Seq2[error, idx.Entry[HashedBucketUid, *LayerRef]]
+	metadata *Metadata
+	layerIt  iter.Seq2[error, *Layer]
 	//layers     []*Layer
 
 	data  []byte
 	saved bool
+}
+
+func newBucket(s *bucketService, uid BucketUid, name string) *Bucket {
+	b := Bucket{
+		Mutex:   &sync.Mutex{},
+		service: s,
+		header: Header{
+			Uid:  uid,
+			Name: name,
+		},
+	}
+
+	return &b
 }
 
 func (b Bucket) Project() (txt string, err error) {

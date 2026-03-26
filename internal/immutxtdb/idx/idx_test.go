@@ -139,9 +139,9 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	_, err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
-	p, errChan := bIdx.PaginateAll(TopToBottom)
+	p, err := bIdx.PaginateAll(TopToBottom)
 	require.NotNil(t, p)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err := p.Next()
 	assert.NoError(t, err)
@@ -160,9 +160,9 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	assert.Equal(t, "k1", entries[3].Key())
 	assert.Equal(t, "pif", entries[3].Val())
 
-	p2, errChan := bIdx.PaginateAll(BottomToTop)
+	p2, err := bIdx.PaginateAll(BottomToTop)
 	require.NotNil(t, p2)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page2, ok, err := p2.Next()
 	assert.NoError(t, err)
@@ -215,9 +215,9 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	p, errChan := bIdx2.PaginateAll(TopToBottom)
+	p, err := bIdx2.PaginateAll(TopToBottom)
 	require.NotNil(t, p)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err := p.Next()
 	assert.NoError(t, err)
@@ -260,9 +260,9 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	_, err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
-	pk1, errChan := bIdx.Paginate("k1", TopToBottom)
+	pk1, err := bIdx.Paginate("k1", TopToBottom)
 	require.NotNil(t, pk1)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err := pk1.Next()
 	assert.NoError(t, err)
@@ -277,9 +277,9 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	assert.Equal(t, "k1", entries[1].Key())
 	assert.Equal(t, "pif", entries[1].Val())
 
-	pk2, errChan := bIdx.Paginate("k1", BottomToTop)
+	pk2, err := bIdx.Paginate("k1", BottomToTop)
 	require.NotNil(t, pk2)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page2, ok, err := pk2.Next()
 	assert.NoError(t, err)
@@ -294,9 +294,9 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	assert.Equal(t, "k1", entries2[1].Key())
 	assert.Equal(t, "foo", entries2[1].Val())
 
-	pk3, errChan := bIdx.Paginate("k3", BottomToTop)
+	pk3, err := bIdx.Paginate("k3", BottomToTop)
 	require.NotNil(t, pk3)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page3, ok, err := pk3.Next()
 	assert.NoError(t, err)
@@ -308,6 +308,63 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	entries3 := page3.Entries()
 	assert.Equal(t, "k3", entries3[0].Key())
 	assert.Equal(t, "baz", entries3[0].Val())
+}
+
+func TestBasicIndex_HashedPaginate(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Paginate")
+	defer os.RemoveAll(tmpDir)
+
+	expectedPageSize := 10
+	expectedState := dummyState
+	expectedTime := time.Now()
+	expectedKeySize := 16
+	expectedSalt := []byte("salted")
+	keySer := serialize.AsciiSerializer{}
+	valSer := serialize.AsciiSerializer{}
+	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	keyRot := NewRotatingHasher(expectedSalt, 16)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, keyRot, nil, enc, expectedPageSize)
+	assert.NoError(t, err)
+	require.NotNil(t, bIdx)
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
+	assert.NoError(t, err)
+	_, err = bIdx.Add(expectedState, expectedTime, "k2", "bar")
+	assert.NoError(t, err)
+	_, err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
+	assert.NoError(t, err)
+	_, err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
+	assert.NoError(t, err)
+
+	// Key is stored with a RotatingHasher so we can't retrieve entries with the plain text key.
+	pk1, err := bIdx.Paginate("k1", TopToBottom)
+	require.NotNil(t, pk1)
+	require.NoError(t, err)
+
+	page, ok, err := pk1.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 0, page.Len())
+
+	// Entries can be retrieved with HashedPaginate()
+	pk1, err = bIdx.HashedPaginate("k1", TopToBottom)
+	require.NotNil(t, pk1)
+	require.NoError(t, err)
+
+	page, ok, err = pk1.Next()
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	require.NotNil(t, page)
+	assert.Equal(t, 2, page.Len())
+	require.True(t, page.Len() >= 2)
+
+	entries := page.Entries()
+	hK0, err := keyRot(0, []byte("k1"))
+	assert.Equal(t, hK0, entries[0].BytesKey())
+	assert.Equal(t, "foo", entries[0].Val())
+	hK3, err := keyRot(3, []byte("k1"))
+	assert.Equal(t, hK3, entries[1].BytesKey())
+	assert.Equal(t, "pif", entries[1].Val())
 }
 
 func TestBasicIndex_Filter(t *testing.T) {
@@ -350,9 +407,9 @@ func TestBasicIndex_Filter(t *testing.T) {
 	_, err = bIdx.Add(expectedState3, time5, "k1", "pif")
 	assert.NoError(t, err)
 
-	p1, errChan := bIdx.FilterAll(TopToBottom, BeforeFilter(time4))
+	p1, err := bIdx.FilterAll(TopToBottom, BeforeFilter(time4))
 	require.NotNil(t, p1)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err := p1.Next()
 	assert.NoError(t, err)
@@ -367,9 +424,9 @@ func TestBasicIndex_Filter(t *testing.T) {
 	assert.Equal(t, "k2", entries[1].Key())
 	assert.Equal(t, "bar", entries[1].Val())
 
-	p2, errChan := bIdx.FilterAll(TopToBottom, AfterFilter(time4))
+	p2, err := bIdx.FilterAll(TopToBottom, AfterFilter(time4))
 	require.NotNil(t, p2)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err = p2.Next()
 	assert.NoError(t, err)
@@ -382,9 +439,9 @@ func TestBasicIndex_Filter(t *testing.T) {
 	assert.Equal(t, "k1", entries[0].Key())
 	assert.Equal(t, "pif", entries[0].Val())
 
-	p3, errChan := bIdx.FilterAll(TopToBottom, BetweenFilter(time2, time4))
+	p3, err := bIdx.FilterAll(TopToBottom, BetweenFilter(time2, time4))
 	require.NotNil(t, p3)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err = p3.Next()
 	assert.NoError(t, err)
@@ -397,9 +454,9 @@ func TestBasicIndex_Filter(t *testing.T) {
 	assert.Equal(t, "k2", entries[0].Key())
 	assert.Equal(t, "bar", entries[0].Val())
 
-	p4, errChan := bIdx.Filter("k1", TopToBottom, AfterFilter(time2))
+	p4, err := bIdx.Filter("k1", TopToBottom, AfterFilter(time2))
 	require.NotNil(t, p4)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err = p4.Next()
 	assert.NoError(t, err)
@@ -412,13 +469,13 @@ func TestBasicIndex_Filter(t *testing.T) {
 	assert.Equal(t, "k1", entries[0].Key())
 	assert.Equal(t, "pif", entries[0].Val())
 
-	p5, errChan := bIdx.FilterAll(TopToBottom, StateFilter(func(s State) (ok bool, loop bool) {
+	p5, err := bIdx.FilterAll(TopToBottom, StateFilter(func(s State) (ok bool, loop bool) {
 		loop = true
 		ok = bytes.Equal(s, expectedState1)
 		return
 	}))
 	require.NotNil(t, p5)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err = p5.Next()
 	assert.NoError(t, err)
@@ -433,13 +490,13 @@ func TestBasicIndex_Filter(t *testing.T) {
 	assert.Equal(t, "k2", entries[1].Key())
 	assert.Equal(t, "bar", entries[1].Val())
 
-	p6, errChan := bIdx.FilterAll(TopToBottom, StateFilter(func(s State) (ok bool, loop bool) {
+	p6, err := bIdx.FilterAll(TopToBottom, StateFilter(func(s State) (ok bool, loop bool) {
 		loop = true
 		ok = bytes.Equal(s, expectedState2)
 		return
 	}))
 	require.NotNil(t, p6)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err = p6.Next()
 	assert.NoError(t, err)

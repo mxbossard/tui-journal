@@ -1,13 +1,11 @@
-package index
+package idx
 
 import (
 	"crypto/sha512"
 	"encoding/binary"
-
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 )
 
-func RotatingHasher(salt []byte, size int) func(int, []byte) ([]byte, error) {
+func NewRotatingHasher(salt []byte, size int) func(int, []byte) ([]byte, error) {
 	return func(pos int, b []byte) ([]byte, error) {
 		hash := sha512.New()
 		hash.Write(salt)
@@ -17,11 +15,11 @@ func RotatingHasher(salt []byte, size int) func(int, []byte) ([]byte, error) {
 			return nil, err
 		}
 		if len(b) != size {
-			b = idx.FixedSizeByteSlice(size, b)
+			b = FixedSizeByteSlice(size, b)
 		}
 		hash.Write(b)
 		hashed := hash.Sum(nil)
-		fixedSizeHash := idx.FixedSizeByteSlice(size, hashed)
+		fixedSizeHash := FixedSizeByteSlice(size, hashed)
 		return fixedSizeHash, nil
 	}
 }

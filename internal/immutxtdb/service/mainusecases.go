@@ -12,7 +12,6 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/index"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
-	"github.com/mxbossard/utilz/errorz"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/ztring"
 )
@@ -248,7 +247,7 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 		return nil, err
 	}
 	data := []byte(txt)
-	n, err := blocWriter.Write(data)
+	n, err := blocWriter.Writer().Write(data)
 	if err != nil {
 		return nil, err
 	}
@@ -384,14 +383,14 @@ func UseCaseDump1_ListLast(dir, device, salt string, count int) ([]*Dump, error)
 	k := 0
 	var dumps []*Dump
 	layersByRhUid := make(map[[128]byte][]*model.LayerRef)
-	paginer2, errChan := idxService.layerIdx.FilterAll(idx.BottomToTop, idx.AndFilter(dumpTypeFilter, layerFormFilter, rootKindFilter))
+	paginer2, err := idxService.layerIdx.FilterAll(idx.BottomToTop, idx.AndFilter(dumpTypeFilter, layerFormFilter, rootKindFilter))
+	if err != nil {
+		return nil, err
+	}
 Loop:
 	for err, page := range paginer2.Pages() {
 		// FIXME: what is this error ?
 		if err != nil {
-			return nil, err
-		}
-		if err := errorz.ChanCollect(errChan); err.GotError() {
 			return nil, err
 		}
 		for pos, entry := range page.All() {
@@ -409,12 +408,11 @@ Loop:
 		// FIXME: need to find UID
 		// FIXME: do not have metadata here ? Where are stored metadatas ? Do we need Metadata before projecting the document ?
 		_ = layerRefs
-		layerPager, errChan := idxService.layerIdx.Paginate((*model.HashedBucketUid)(rhUid[:]), idx.BottomToTop)
-		_ = layerPager
-		// FIXME: what to do with errChan ?
-		if err := errorz.ChanCollect(errChan); err.GotError() {
+		layerPager, err := idxService.layerIdx.Paginate((*model.HashedBucketUid)(rhUid[:]), idx.BottomToTop)
+		if err != nil {
 			return nil, err
 		}
+		_ = layerPager
 		d := &Dump{
 			Bucket: model.Bucket{
 				Uid:        model.BucketUid((rhUid[:])),
