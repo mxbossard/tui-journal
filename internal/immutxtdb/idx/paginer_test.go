@@ -26,7 +26,7 @@ func TestPaginer_Empty(t *testing.T) {
 	assert.Empty(t, page.Entries())
 }
 
-func TestPaginer_AllIterator(t *testing.T) {
+func TestPaginer_Pages(t *testing.T) {
 	expectedPageSize := 3
 	expectedPreloadCount := 2
 	expectedCount := 10
@@ -61,9 +61,19 @@ func TestPaginer_AllIterator(t *testing.T) {
 		i++
 	}
 	assert.Equal(t, expectedCount/expectedPageSize+1, i, "bad page count")
+
+	// 2 consecutive operations should works
+	i = 0
+	for err, page := range p.Pages() {
+		assert.NoError(t, err)
+		require.NotNil(t, p)
+		assert.Equal(t, i, page.Number(), "bad page number")
+		i++
+	}
+	assert.Equal(t, expectedCount/expectedPageSize+1, i, "bad page count")
 }
 
-func TestPaginer_NextPages(t *testing.T) {
+func TestPaginer_Next(t *testing.T) {
 	expectedPageSize := 3
 	expectedPreloadCount := 2
 	expectedCount := 10
@@ -119,6 +129,10 @@ func TestPaginer_NextPages(t *testing.T) {
 
 		i++
 		if !ok {
+			_, next, err := p.Next()
+			assert.False(t, next)
+			assert.Error(t, err)
+			assert.Equal(t, ErrNotExist, err)
 			break
 		}
 	}
@@ -128,7 +142,7 @@ func TestPaginer_NextPages(t *testing.T) {
 	assert.Equal(t, expectedCount, n, "bad item iteration count")
 }
 
-func TestPaginer_PrevPages(t *testing.T) {
+func TestPaginer_Prev(t *testing.T) {
 	expectedPageSize := 3
 	expectedPreloadCount := 2
 	expectedCount := 10
@@ -187,6 +201,101 @@ func TestPaginer_PrevPages(t *testing.T) {
 	assert.Panics(t, func() {
 		p.Prev()
 	})
+}
+
+func TestPaginer_All(t *testing.T) {
+	expectedPageSize := 3
+	expectedPreloadCount := 2
+	expectedCount := 10
+
+	a := 5
+	b := &a
+	assert.Equal(t, a, *b, "int ptr is a bad idea")
+
+	k := 0
+	var expectedMessages []string
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
+		for {
+			msg := fmt.Sprintf("msg%d", k)
+			expectedMessages = append(expectedMessages, msg)
+			e := NewEntry(k, msg, k, time.Now(), []byte("foobarba"), nil, nil)
+			fmt.Printf("pushing entry: [%s] ...\n", e)
+			if !push(e) {
+				// fmt.Printf("breaked!\n")
+				break
+			}
+			k++
+			if k >= expectedCount {
+				// End source
+				// fmt.Printf("source end reached\n")
+				break
+			}
+		}
+	})
+	require.NotNil(t, p)
+	// assert.Equal(t, expectedPageSize*expectedPreloadCount, k)
+
+	n := 0
+	for err, entry := range p.All() {
+		assert.NoError(t, err)
+		assert.Equal(t, expectedMessages[n], entry.Val(), "bad entry value")
+		n++
+	}
+	assert.Len(t, expectedMessages, expectedCount, "bad produced msg count")
+	assert.Equal(t, expectedCount, n, "bad entry iteration count")
+
+	// 2 consecutive iteration should works
+	n = 0
+	for err, entry := range p.All() {
+		assert.NoError(t, err)
+		assert.Equal(t, expectedMessages[n], entry.Val(), "bad entry value")
+		n++
+	}
+	assert.Len(t, expectedMessages, expectedCount, "bad produced msg count")
+	assert.Equal(t, expectedCount, n, "bad entry iteration count")
+}
+
+func TestPaginer_All_Empty(t *testing.T) {
+	expectedPageSize := 3
+	expectedPreloadCount := 0
+	expectedCount := 0
+
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
+		// push nothing
+	})
+	require.NotNil(t, p)
+
+	n := 0
+	for err := range p.All() {
+		assert.NoError(t, err)
+		n++
+	}
+	assert.Equal(t, expectedCount, n, "bad entry iteration count")
+}
+
+func TestPaginer_All_OneItem(t *testing.T) {
+	expectedPageSize := 3
+	expectedPreloadCount := 0
+	expectedCount := 1
+
+	k := 0
+	var expectedMessages []string
+	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
+		msg := fmt.Sprintf("msg%d", k)
+		expectedMessages = append(expectedMessages, msg)
+		e := NewEntry(k, msg, k, time.Now(), []byte("foobarba"), nil, nil)
+		fmt.Printf("pushing entry: [%s] ...\n", e)
+		push(e)
+	})
+	require.NotNil(t, p)
+
+	n := 0
+	for err := range p.All() {
+		assert.NoError(t, err)
+		n++
+	}
+	assert.Len(t, expectedMessages, expectedCount, "bad produced msg count")
+	assert.Equal(t, expectedCount, n, "bad entry iteration count")
 }
 
 func TestPaginer_WithErrors(t *testing.T) {

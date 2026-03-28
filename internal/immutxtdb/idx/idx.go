@@ -2,11 +2,9 @@ package idx
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"iter"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,40 +22,18 @@ Ideas:
 
 */
 
-type Order string
-
 const (
 	TopToBottom Order = "TopToBottom"
 	BottomToTop Order = "BottomToTop"
 )
 
-type State []byte
+type Order string
 
-var dummyState = BuildState(8, "dummy")
+type void struct{}
+type Void *void
 
 type RotatingHasher func(int, []byte) ([]byte, error)
 type KeyRotatingHasher[K comparable] func(int, K) (K, error)
-
-func BuildState(size int, s ...string) State {
-	data := make([]byte, size)
-	_, err := binary.Encode(data, binary.BigEndian, []byte(strings.Join(s, "")))
-	if err != nil {
-		panic(err)
-	}
-	// fmt.Printf("built state of size: %d with strings: %v => %v\n", size, s, data)
-	return State(data)
-}
-
-func CatState(size int, states ...State) State {
-	data := make([]byte, size)
-	k := 0
-	for _, s := range states {
-		copy(data[k:], s)
-		k += len(s)
-	}
-	// fmt.Printf("cat state of size: %d with states: %v => %v\n", size, states, data)
-	return State(data)
-}
 
 // FIXME: Paginer SHOULD return KV Entries also embedding seq, time and state ?
 type Index[K comparable, V any] interface {
@@ -79,95 +55,6 @@ type Index[K comparable, V any] interface {
 	PaginateAll(order Order) (Paginer[K, V], error)
 	// Return an iterator of all KV entries
 	All(order Order) (iter.Seq2[error, Entry[K, V]], error)
-}
-
-type void struct{}
-type Void *void
-
-type Entry[K comparable, V any] interface {
-	Key() K
-	BytesKey() []byte
-	Val() V
-	Seq() int
-	Time() time.Time
-	State() State
-	Error() error
-}
-
-type BasicEntry[K comparable, V any] struct {
-	key      *K
-	val      *V
-	seq      int
-	time     time.Time
-	state    State
-	err      error
-	bytesKey []byte
-}
-
-func NewEntry[K comparable, V any](key K, val V, seq int, time time.Time, state State, err error, bKey []byte) *BasicEntry[K, V] {
-	e := &BasicEntry[K, V]{
-		key:      &key,
-		val:      &val,
-		seq:      seq,
-		time:     time,
-		state:    state,
-		err:      err,
-		bytesKey: bKey,
-	}
-	return e
-}
-
-func NewErrEntry[K comparable, V any](err error) *BasicEntry[K, V] {
-	e := &BasicEntry[K, V]{
-		seq: -1,
-		err: err,
-	}
-	return e
-}
-
-func (e BasicEntry[K, V]) String() string {
-	var key K
-	if e.key != nil {
-		key = *e.key
-	}
-	return fmt.Sprintf("Entry(#%d)[%v, %s]", e.seq, key, e.val)
-}
-
-func (e BasicEntry[K, V]) Key() K {
-	if e.key != nil {
-		return *e.key
-	}
-	var k K
-	return k
-}
-
-func (e BasicEntry[K, V]) BytesKey() []byte {
-	return e.bytesKey
-}
-
-func (e BasicEntry[K, V]) Val() V {
-	if e.val != nil {
-		return *e.val
-	}
-	var v V
-	return v
-}
-
-func (e BasicEntry[K, V]) Seq() int {
-	return e.seq
-
-}
-
-func (e BasicEntry[K, V]) Time() time.Time {
-	return e.time
-}
-
-func (e BasicEntry[K, V]) State() State {
-	return e.state
-}
-
-func (e BasicEntry[K, V]) Error() error {
-	return e.err
 }
 
 type basicIndex[K comparable, V any] struct {
@@ -460,23 +347,10 @@ func (i *basicIndex[K, V]) PaginateAll(order Order) (Paginer[K, V], error) {
 	return i.filter(noKey, false, false, order, nil)
 }
 
-func FixedSizeString(s int, k string) []byte {
-	b := make([]byte, s)
-	n := copy(b, []byte(k))
-	if n > s {
-		panic(fmt.Sprintf("string too long for fixed size: %d", s))
+func (i *basicIndex[K, V]) All(order Order) (iter.Seq2[error, Entry[K, V]], error) {
+	paginer, err := i.PaginateAll(order)
+	if err != nil {
+		return nil, err
 	}
-	return b
-}
-
-func FixedSizeByteSlice(s int, k []byte) []byte {
-	if len(k) == s {
-		return k
-	}
-	b := make([]byte, s)
-	n := copy(b, k)
-	if n > s {
-		panic(fmt.Sprintf("byte slice too long for fixed size: %d", s))
-	}
-	return b
+	return paginer.All(), nil
 }

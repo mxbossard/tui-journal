@@ -190,7 +190,7 @@ func (e basicIdxEncoder) Encode(seq int, t time.Time, s State, k []byte, v []byt
 		return nil, fmt.Errorf("encoding delimiterChar: %w", err)
 	}
 	i += e.stateSize
-	fmt.Printf("encoded state: %v\n", []byte(s))
+	// fmt.Printf("encoded state: %v\n", []byte(s))
 
 	if len(k) > 0 {
 		n, err = binary.Encode(buf[i:], binary.BigEndian, k)

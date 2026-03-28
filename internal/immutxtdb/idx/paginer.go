@@ -1,6 +1,7 @@
 package idx
 
 import (
+	"errors"
 	"iter"
 )
 
@@ -49,6 +50,7 @@ func (p *page[K, V]) All() iter.Seq2[int, Entry[K, V]] {
 
 type Paginer[K comparable, V any] interface {
 	Close()
+	Reset()
 	Prev() (*page[K, V], bool, error)
 	Next() (*page[K, V], bool, error)
 	Pages() iter.Seq2[error, *page[K, V]]
@@ -104,6 +106,10 @@ func (p *paginer[K, V]) Close() {
 	// fmt.Printf("paginer closed\n")
 }
 
+func (p *paginer[K, V]) Reset() {
+	p.current = -1
+}
+
 func (p *paginer[K, V]) Prev() (*page[K, V], bool, error) {
 	if p.current <= 0 {
 		panic("previous page does not exists")
@@ -114,10 +120,14 @@ func (p *paginer[K, V]) Prev() (*page[K, V], bool, error) {
 	return current, p.current > 0, current.Err()
 }
 
+var ErrNotExist = errors.New("page do not exists")
+
 func (p *paginer[K, V]) Next() (*page[K, V], bool, error) {
-	if p.current >= len(p.loaded) {
-		panic("next page does not exists")
+	if p.current+1 >= len(p.loaded) {
+		// panic("next page does not exists")
+		// panic(fmt.Sprintf("next page #%d does not exists", p.current+1))
 		// return nil, false
+		return nil, false, ErrNotExist
 	}
 	p.current++
 
@@ -127,9 +137,9 @@ func (p *paginer[K, V]) Next() (*page[K, V], bool, error) {
 		p.loaded = append(p.loaded, next)
 	}
 
-	remaining := p.current < (len(p.loaded) - 1)
+	remaining := p.current+1 < len(p.loaded)
 	current := p.loaded[p.current]
-	// fmt.Printf("Next() current: %d ; loaded size: %d ; remaining: %v\n", p.current, len(p.loaded), remaining)
+	// fmt.Printf("Next() current: %d ; loaded count: %d ; remaining: %v\n", p.current, len(p.loaded), remaining)
 	// fmt.Printf("Returning page #%d ...\n", current.Number())
 	return current, remaining, current.Err()
 
@@ -137,12 +147,14 @@ func (p *paginer[K, V]) Next() (*page[K, V], bool, error) {
 
 func (p *paginer[K, V]) Pages() iter.Seq2[error, *page[K, V]] {
 	return func(yield func(error, *page[K, V]) bool) {
+		p.Reset()
 		for {
 			page, ok, err := p.Next()
 			if !yield(err, page) {
 				return
 			}
 			if !ok {
+				// No more pages
 				return
 			}
 		}
@@ -151,15 +163,24 @@ func (p *paginer[K, V]) Pages() iter.Seq2[error, *page[K, V]] {
 
 func (p *paginer[K, V]) All() iter.Seq2[error, Entry[K, V]] {
 	return func(yield func(error, Entry[K, V]) bool) {
+		p.Reset()
 		for {
 			page, ok, err := p.Next()
+			if err != nil {
+				if !yield(err, NewErrEntry[K, V](err)) {
+					return
+				}
+				// Stop page iteration on error
+				return
+			}
 			for _, entry := range page.All() {
 				// fmt.Printf("supplying entry %s in pagine %d ...\n", entry, page.number)
-				if !yield(err, entry) {
+				if !yield(nil, entry) {
 					return
 				}
 			}
 			if !ok {
+				// No more pages
 				return
 			}
 		}

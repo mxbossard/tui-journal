@@ -43,73 +43,24 @@ var (
 	dummyState = idx.BuildState(BucketNameIdxStateSize, "dummy")
 )
 
+var (
+	headerSerializer   = serialize.StructSerializer[Header]{}
+	metadataSerializer = serialize.StructSerializer[Metadata]{}
+)
+
 type BucketNameIndex idx.Index[string, BucketUid]
 type HeaderRefIndex idx.Index[BucketUid, *HeaderRef]
 type BucketRefIndex idx.Index[HashedBucketUid, *BucketRef]
 
-type BucketUidSerializer struct {
-	serialize.Serializer[BucketUid]
-}
+type Service interface {
+	New(name string, labels Labels) *Bucket
+	Names() (map[string]BucketUid, error)
+	Get(uid BucketUid) (*Bucket, error)
+	Filter(f idx.Filter, o idx.Order, pageSize, preloadCount int) idx.Paginer[BucketUid, *Bucket]
 
-func (s BucketUidSerializer) Serialize(i BucketUid, o []byte) (int, error) {
-	for k := range len(i) {
-		o[k] = (i)[k]
-	}
-	return len(i), nil
-}
-
-func (s BucketUidSerializer) Deserialize(i []byte) (BucketUid, error) {
-	var o BucketUid
-	for k := 0; k < len(o) && k < len(i); k++ {
-		o[k] = i[k]
-	}
-	return o, nil
-}
-
-type HashedBucketUidSerializer struct {
-	serialize.Serializer[HashedBucketUid]
-}
-
-func (s HashedBucketUidSerializer) Serialize(i HashedBucketUid, o []byte) (int, error) {
-	for k := range len(i) {
-		o[k] = (i)[k]
-	}
-	return len(i), nil
-}
-
-func (s HashedBucketUidSerializer) Deserialize(i []byte) (HashedBucketUid, error) {
-	var o HashedBucketUid
-	for k := 0; k < len(o) && k < len(i); k++ {
-		o[k] = i[k]
-	}
-	return o, nil
-}
-
-// (KEY: string, VAL: BucketUid)
-func NewBucketNameIndex(indexDir, device string) (BucketNameIndex, error) {
-	enc := idx.NewAsciiEncoder(0, BucketNameIdxStateSize, BucketNameIdxKeySize, BucketNameIdxDataSize)
-	keySer := serialize.AsciiSerializer{}
-	valSer := BucketUidSerializer{}
-	return idx.NewBasicIndex(indexDir, BucketNameIdxQualifier, device, keySer, valSer,
-		nil, nil, enc, BucketNameIdxPageSize)
-}
-
-// (KEY: RH(BucketUid), VAL: HeaderRef)
-func NewHeaderRefIndex(indexDir, device, salt string) (HeaderRefIndex, error) {
-	enc := idx.NewAsciiEncoder(0, HeaderRefIdxStateSize, HeaderRefIdxKeySize, HeaderRefIdxDataSize)
-	keySer := BucketUidSerializer{}
-	valSer := serialize.StructSerializer[HeaderRef]{}
-	return idx.NewBasicIndex(indexDir, HeaderRefIdxQualifier, device, keySer, valSer,
-		idx.NewRotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize)
-}
-
-// (KEY: H(BucketUid), VAL: BucketRef)
-func NewBucketRefIndex(indexDir, device string) (BucketRefIndex, error) {
-	enc := idx.NewAsciiEncoder(0, BucketRefIdxStateSize, BucketRefIdxKeySize, BucketRefIdxDataSize)
-	keySer := HashedBucketUidSerializer{}
-	valSer := serialize.StructSerializer[BucketRef]{}
-	return idx.NewBasicIndex(indexDir, BucketRefIdxQualifier, device, keySer, valSer,
-		nil, nil, enc, BucketRefIdxPageSize)
+	save(b *Bucket) error
+	squash(b *Bucket) error
+	commit(b *Bucket) error
 }
 
 type bucketService struct {
@@ -131,7 +82,7 @@ func NewBucketService(dir, device, salt string) (*bucketService, error) {
 	if err != nil {
 		return nil, err
 	}
-	bucketNameIdx, err := NewBucketNameIndex(bucketIdxDir, device)
+	bucketNameIdx, err := newBucketNameIndex(bucketIdxDir, device)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +90,7 @@ func NewBucketService(dir, device, salt string) (*bucketService, error) {
 	if err != nil {
 		return nil, err
 	}
-	headerRefIdx, err := NewHeaderRefIndex(bucketByTimeIdxDir, device, salt)
+	headerRefIdx, err := newHeaderRefIndex(bucketByTimeIdxDir, device, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +98,7 @@ func NewBucketService(dir, device, salt string) (*bucketService, error) {
 	if err != nil {
 		return nil, err
 	}
-	bucketRefIdx, err := NewBucketRefIndex(layerIdxDir, device)
+	bucketRefIdx, err := newBucketRefIndex(layerIdxDir, device)
 	if err != nil {
 		return nil, err
 	}
@@ -163,21 +114,13 @@ func NewBucketService(dir, device, salt string) (*bucketService, error) {
 	}, nil
 }
 
-func generateRandUid() BucketUid {
-	randBytes := make([]byte, 16)
-	_, err := rand.Read(randBytes)
-	if err != nil {
-		panic(err)
-	}
-	return BucketUid(randBytes)
-}
-
 func (s *bucketService) New(name string, labels Labels) *Bucket {
 	uid := generateRandUid()
 	// FIXME: check if uid already exists
 
 	b := newBucket(s, uid, name)
 	b.header.changed = true
+	b.header.Labels = labels
 
 	return b
 }
@@ -191,21 +134,24 @@ func (s *bucketService) create(b *Bucket) error {
 		return fmt.Errorf("unable to add bucket name: %w", err)
 	}
 
-	// TODO: 2- Build first metadata
-	metadata := Metadata{
-		Version: 0,
-	}
-
 	// TODO: 3- store Header, Layer & Metadata
+	b.header.Created = &now
 	headerRef, err := storeHeader(s.dir, s.device, &b.header)
 	if err != nil {
-		return err
-	}
-	metadataRef, err := storeMetadata(s.dir, s.device, &metadata)
-	if err != nil {
+		b.header.Created = nil
 		return err
 	}
 	layerRef, err := storeLayer(s.dir, s.device, b.data)
+	if err != nil {
+		return err
+	}
+
+	metadata := Metadata{
+		Version: 0,
+		Size:    len(b.data),
+		Updated: &now,
+	}
+	metadataRef, err := storeMetadata(s.dir, s.device, &metadata)
 	if err != nil {
 		return err
 	}
@@ -229,7 +175,7 @@ func (s *bucketService) create(b *Bucket) error {
 		return fmt.Errorf("unable to add bucket ref: %w", err)
 	}
 
-	b.header.Created = now
+	b.header.Created = &now
 	b.header.changed = false
 	b.metadata = &metadata
 	// var layerRefIt iter.Seq2[error, idx.Entry[HashedBucketUid, *LayerRef]] = func(yield func(error, idx.Entry[HashedBucketUid, *LayerRef]) bool) {
@@ -257,7 +203,7 @@ func (s *bucketService) update(b *Bucket) error {
 	metadata := Metadata{
 		Version: b.metadata.Version + 1,
 	}
-	b.header.Created = now
+	b.header.Created = &now
 	b.header.changed = false
 	b.metadata = &metadata
 	return nil
@@ -311,19 +257,36 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 	var layers []*Layer
 	var lastMetadata *Metadata
 
-	b := newBucket(s, uid, lastHeader.Name)
-	b.saved = true
-	b.metadata = lastMetadata
+	for _, entry := range bucketPgnr.All() {
+		metadata, err := loadMetadata(&entry.Val().MetadataRef)
+		if err != nil {
+			return nil, err
+		}
+		if lastMetadata == nil {
+			lastMetadata = metadata
+			break
+		}
+	}
+	b := &Bucket{
+		service:  s,
+		header:   *lastHeader,
+		metadata: lastMetadata,
+		saved:    true,
+	}
+
 	b.layerIt = func(yield func(error, *Layer) bool) {
-		for _, entry := range bucketPgnr.All() {
+		bucketPgnr.Reset()
+		for err, entry := range bucketPgnr.All() {
+			if err != nil {
+				if !yield(fmt.Errorf("error iterating bucketRefIdx: %w", err), nil) {
+					break
+				}
+			}
 			metadata, err := loadMetadata(&entry.Val().MetadataRef)
 			if err != nil {
 				if !yield(err, nil) {
 					break
 				}
-			}
-			if lastMetadata == nil {
-				lastMetadata = metadata
 			}
 
 			data, err := files.LoadBlocPart((*filez.BlocPart)(&entry.Val().LayerRef))
@@ -347,7 +310,7 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 	return b, nil
 }
 
-func (s *bucketService) Filter(f idx.Filter, o idx.Order) idx.Paginer[BucketUid, *Bucket] {
+func (s *bucketService) Filter(f idx.Filter, o idx.Order, pageSize, preloadCount int) idx.Paginer[BucketUid, *Bucket] {
 	panic("not implemented yet")
 }
 
@@ -359,14 +322,24 @@ func (s *bucketService) squash(b *Bucket) error {
 	panic("not implemented yet")
 }
 
-func (s *bucketService) Names() (error, map[string]BucketUid) {
-	panic("not implemented yet")
-}
+func (s *bucketService) Names() (map[string]BucketUid, error) {
+	nameIt, err := s.bucketNameIdx.All(idx.TopToBottom)
+	if err != nil {
+		return nil, err
+	}
 
-var (
-	headerSerializer   = serialize.StructSerializer[Header]{}
-	metadataSerializer = serialize.StructSerializer[Metadata]{}
-)
+	nameByUidMap := make(map[BucketUid]string)
+	lastUidByNameMap := make(map[string]BucketUid)
+	for err, entry := range nameIt {
+		if err != nil {
+			return nil, err
+		}
+		nameByUidMap[BucketUid(entry.Val())] = entry.Key()
+		lastUidByNameMap[entry.Key()] = entry.Val()
+	}
+
+	return lastUidByNameMap, nil
+}
 
 func storeHeader(dir, device string, h *Header) (*HeaderRef, error) {
 	serializer := serialize.StructSerializer[Header]{}
@@ -444,4 +417,40 @@ func loadMetadata(ref *MetadataRef) (*Metadata, error) {
 func loadLayer(ref *LayerRef) ([]byte, error) {
 	b, err := files.LoadBlocPart((*filez.BlocPart)(ref))
 	return b, err
+}
+
+// (KEY: string, VAL: BucketUid)
+func newBucketNameIndex(indexDir, device string) (BucketNameIndex, error) {
+	enc := idx.NewAsciiEncoder(0, BucketNameIdxStateSize, BucketNameIdxKeySize, BucketNameIdxDataSize)
+	keySer := serialize.AsciiSerializer{}
+	valSer := BucketUidSerializer{}
+	return idx.NewBasicIndex(indexDir, BucketNameIdxQualifier, device, keySer, valSer,
+		nil, nil, enc, BucketNameIdxPageSize)
+}
+
+// (KEY: RH(BucketUid), VAL: HeaderRef)
+func newHeaderRefIndex(indexDir, device, salt string) (HeaderRefIndex, error) {
+	enc := idx.NewAsciiEncoder(0, HeaderRefIdxStateSize, HeaderRefIdxKeySize, HeaderRefIdxDataSize)
+	keySer := BucketUidSerializer{}
+	valSer := serialize.StructSerializer[HeaderRef]{}
+	return idx.NewBasicIndex(indexDir, HeaderRefIdxQualifier, device, keySer, valSer,
+		idx.NewRotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize)
+}
+
+// (KEY: H(BucketUid), VAL: BucketRef)
+func newBucketRefIndex(indexDir, device string) (BucketRefIndex, error) {
+	enc := idx.NewAsciiEncoder(0, BucketRefIdxStateSize, BucketRefIdxKeySize, BucketRefIdxDataSize)
+	keySer := HashedBucketUidSerializer{}
+	valSer := serialize.StructSerializer[BucketRef]{}
+	return idx.NewBasicIndex(indexDir, BucketRefIdxQualifier, device, keySer, valSer,
+		nil, nil, enc, BucketRefIdxPageSize)
+}
+
+func generateRandUid() BucketUid {
+	randBytes := make([]byte, 16)
+	_, err := rand.Read(randBytes)
+	if err != nil {
+		panic(err)
+	}
+	return BucketUid(randBytes)
 }

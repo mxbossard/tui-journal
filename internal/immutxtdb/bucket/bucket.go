@@ -14,7 +14,7 @@ type Labels map[string]string
 // Store Layer Metadata
 type Metadata struct {
 	Version int
-	Updated time.Time
+	Updated *time.Time
 	Size    int
 }
 
@@ -29,7 +29,7 @@ type Layer struct {
 type Header struct {
 	Uid     BucketUid
 	Name    string
-	Created time.Time
+	Created *time.Time
 	Labels  Labels
 
 	changed bool
@@ -49,7 +49,7 @@ type BucketRef struct {
 
 type Bucket struct {
 	*sync.Mutex
-	service *bucketService
+	service Service
 
 	header Header
 	// Last layer Metadata
@@ -61,7 +61,7 @@ type Bucket struct {
 	saved bool
 }
 
-func newBucket(s *bucketService, uid BucketUid, name string) *Bucket {
+func newBucket(s Service, uid BucketUid, name string) *Bucket {
 	b := Bucket{
 		Mutex:   &sync.Mutex{},
 		service: s,
