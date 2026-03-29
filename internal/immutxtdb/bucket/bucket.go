@@ -1,11 +1,17 @@
 package bucket
 
 import (
+	"fmt"
 	"iter"
 	"sync"
 	"time"
 
 	"github.com/mxbossard/utilz/filez"
+)
+
+const (
+	BinaryMode = int8(1)
+	TextMode   = int8(2)
 )
 
 type BucketUid [16]byte
@@ -31,6 +37,7 @@ type Header struct {
 	Name    string
 	Created *time.Time
 	Labels  Labels
+	Mode    int8
 
 	changed bool
 }
@@ -57,8 +64,9 @@ type Bucket struct {
 	layerIt  iter.Seq2[error, *Layer]
 	//layers     []*Layer
 
-	data  []byte
-	saved bool
+	data       []byte
+	stringData string
+	saved      bool
 }
 
 func newBucket(s Service, uid BucketUid, name string) *Bucket {
@@ -77,19 +85,41 @@ func newBucket(s Service, uid BucketUid, name string) *Bucket {
 func (b Bucket) Project() (txt string, err error) {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
+
+	return b.project()
+}
+
+func (b Bucket) project() (txt string, err error) {
 	panic("not implemented yet")
 }
 
-func (b *Bucket) Write(content []byte) error {
+func (b *Bucket) Write(data []byte) error {
+	if b.header.Mode == TextMode {
+		return fmt.Errorf("use WriteText for text mode bucket")
+	}
+
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
-	b.data = content
+	if b.header.Mode == 0 {
+		b.header.Mode = BinaryMode
+	}
+	b.data = data
 	b.saved = false
 	return nil
 }
 
-func (b *Bucket) WriteString(content string) error {
-	return b.Write([]byte(content))
+func (b *Bucket) WriteText(text string) error {
+	b.Mutex.Lock()
+	defer b.Mutex.Unlock()
+	if b.header.Mode != 0 && b.header.Mode != TextMode {
+		return fmt.Errorf("not a text mode bucket")
+	}
+	if b.header.Mode == 0 {
+		b.header.Mode = TextMode
+	}
+	b.stringData = text
+	b.saved = false
+	return nil
 }
 
 func (b *Bucket) Labels(labels Labels) error {

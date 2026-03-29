@@ -63,7 +63,7 @@ func TestBucketService_Save(t *testing.T) {
 
 	before2 := time.Now()
 
-	err = bkt.WriteString(expectedMsg)
+	err = bkt.WriteText(expectedMsg)
 	assert.NoError(t, err)
 
 	before3 := time.Now()
@@ -123,7 +123,7 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	bkt1 := svc.New(expectedName, expectedLabels)
 	assert.NotNil(t, bkt1)
 
-	err = bkt1.WriteString(expectedMsg)
+	err = bkt1.WriteText(expectedMsg)
 	assert.NoError(t, err)
 
 	before := time.Now()
@@ -207,21 +207,21 @@ func TestBucketService_Names(t *testing.T) {
 	// Make some buckets
 	bkt1 := svc.New(expectedName1, expectedLabels)
 	assert.NotNil(t, bkt1)
-	err = bkt1.WriteString(expectedMsg1)
+	err = bkt1.WriteText(expectedMsg1)
 	assert.NoError(t, err)
 	err = bkt1.Save()
 	assert.NoError(t, err)
 
 	bkt2 := svc.New(expectedName2, expectedLabels)
 	assert.NotNil(t, bkt2)
-	err = bkt2.WriteString(expectedMsg2)
+	err = bkt2.WriteText(expectedMsg2)
 	assert.NoError(t, err)
 	err = bkt2.Save()
 	assert.NoError(t, err)
 
 	bkt3 := svc.New(expectedName3, expectedLabels)
 	assert.NotNil(t, bkt3)
-	err = bkt3.WriteString(expectedMsg3)
+	err = bkt3.WriteText(expectedMsg3)
 	assert.NoError(t, err)
 	err = bkt3.Save()
 	assert.NoError(t, err)
@@ -255,7 +255,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	bkt1 := svc.New(expectedName, expectedLabels)
 	assert.NotNil(t, bkt1)
 
-	err = bkt1.WriteString(expectedMsg1)
+	err = bkt1.WriteText(expectedMsg1)
 	assert.NoError(t, err)
 
 	before1 := time.Now()
@@ -263,7 +263,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.NoError(t, err)
 	after1 := time.Now()
 
-	err = bkt1.WriteString(expectedMsg2)
+	err = bkt1.WriteText(expectedMsg2)
 	assert.NoError(t, err)
 
 	before2 := time.Now()

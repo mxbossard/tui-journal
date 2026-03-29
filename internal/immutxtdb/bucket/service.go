@@ -1,9 +1,12 @@
 package bucket
 
 import (
+	"bytes"
+	"compress/zlib"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
 	"os"
 	"path/filepath"
@@ -13,6 +16,7 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/utilz/filez"
+	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
 const (
@@ -128,6 +132,16 @@ func (s *bucketService) New(name string, labels Labels) *Bucket {
 func (s *bucketService) create(b *Bucket) error {
 	now := time.Now()
 
+	var data []byte
+	if b.header.Mode == BinaryMode {
+		data = b.data
+	} else if b.header.Mode == TextMode {
+		data = []byte(b.stringData)
+	}
+	if len(data) == 0 {
+		return fmt.Errorf("no data to save")
+	}
+
 	// TODO: 1- Add (name, uid) in bucketName Idx
 	_, err := s.bucketNameIdx.Add(dummyState, now, b.header.Name, b.header.Uid)
 	if err != nil {
@@ -141,14 +155,14 @@ func (s *bucketService) create(b *Bucket) error {
 		b.header.Created = nil
 		return err
 	}
-	layerRef, err := storeLayer(s.dir, s.device, b.data)
+	layerRef, err := storeLayer(s.dir, s.device, data)
 	if err != nil {
 		return err
 	}
 
 	metadata := Metadata{
 		Version: 0,
-		Size:    len(b.data),
+		Size:    len(data),
 		Updated: &now,
 	}
 	metadataRef, err := storeMetadata(s.dir, s.device, &metadata)
@@ -185,7 +199,7 @@ func (s *bucketService) create(b *Bucket) error {
 	var layerIt iter.Seq2[error, *Layer] = func(yield func(error, *Layer) bool) {
 		l := Layer{
 			Metadata: &metadata,
-			Content:  b.data,
+			Content:  data,
 		}
 		yield(nil, &l)
 	}
@@ -193,8 +207,92 @@ func (s *bucketService) create(b *Bucket) error {
 	return nil
 }
 
+func zipText(text string) ([]byte, error) {
+	var b bytes.Buffer
+	w, err := zlib.NewWriterLevel(&b, 9)
+	if err != nil {
+		return nil, err
+	}
+	_, err = w.Write([]byte(text))
+	if err != nil {
+		return nil, err
+	}
+	err = w.Close()
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func unzipText(data []byte) (string, error) {
+	dataReader := bytes.NewReader(data)
+	r, err := zlib.NewReader(dataReader)
+	if err != nil {
+		return "", err
+	}
+	var b bytes.Buffer
+	_, err = io.Copy(&b, r)
+	if err != nil {
+		return "", err
+	}
+	err = r.Close()
+	if err != nil {
+		return "", err
+	}
+	return string(b.Bytes()), nil
+}
+
+func textPatchData(b *Bucket) ([]byte, error) {
+	storedText, err := b.project()
+	if err != nil {
+		return nil, err
+	}
+	nexText := b.stringData
+	dmp := diffmatchpatch.New()
+	diff := dmp.DiffMain(storedText, nexText, false)
+	patch := dmp.PatchMake(diff)
+	textPatch := dmp.PatchToText(patch)
+	if len(textPatch) == 0 {
+		return nil, err
+	}
+	zipedPatch, err := zipText(textPatch)
+	return zipedPatch, err
+}
+
 func (s *bucketService) update(b *Bucket) error {
 	now := time.Now()
+
+	// TODO: 1- Attempt to make a patch of the update.
+	var data []byte
+	if b.header.Mode == BinaryMode {
+		data = b.data
+		// TODO: check if data changed
+		// TODO: store a bynary layer ?
+		// FIXME: add a binary append mode ?
+		// FIXME: autodetect appending ?
+	} else if b.header.Mode == TextMode {
+		var err error
+		data, err = textPatchData(b)
+		if err != nil {
+			return err
+		}
+		if len(data) == 0 {
+			// No diff => nothing to save
+			return nil
+		}
+		rawBinaryText := []byte(b.stringData)
+		if len(data) > len(rawBinaryText) {
+			// Diff bigger than raw data => store a root layer
+			// TODO
+		} else {
+			// Store a diff layer
+			// TODO
+		}
+	}
+
+	if len(data) == 0 {
+		return fmt.Errorf("no data to save")
+	}
 
 	// TODO: 2- Add (RhUid, headerRef) in headerRef Idx if Header changed
 	// TODO: 3- Create bucket root layer + layerRef + metadataRef
