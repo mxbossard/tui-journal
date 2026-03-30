@@ -82,14 +82,25 @@ func newBucket(s Service, uid BucketUid, name string) *Bucket {
 	return &b
 }
 
-func (b Bucket) Project() (txt string, err error) {
+func (b Bucket) ProjectBinary() (data []byte, err error) {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 
-	return b.project()
+	return b.projectBinary()
 }
 
-func (b Bucket) project() (txt string, err error) {
+func (b Bucket) projectBinary() (data []byte, err error) {
+	panic("not implemented yet")
+}
+
+func (b Bucket) ProjectText() (txt string, err error) {
+	b.Mutex.Lock()
+	defer b.Mutex.Unlock()
+
+	return b.projectText()
+}
+
+func (b Bucket) projectText() (txt string, err error) {
 	panic("not implemented yet")
 }
 
