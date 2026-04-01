@@ -6,12 +6,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/mxbossard/utilz/filez"
 )
 
 const (
 	BinaryMode = int8(1)
 	TextMode   = int8(2)
+
+	RootLayerFlag = 0x1
+	DiffLayerFlag = 0x2
+)
+
+var (
+	dummyState     = idx.BuildStringState(BucketNameIdxStateSize, "dummy")
+	RootLayerState = idx.BuildState(RootLayerFlag)
+	DiffLayerState = idx.BuildState(DiffLayerFlag)
 )
 
 type BucketUid [16]byte
@@ -27,6 +38,7 @@ type Metadata struct {
 type Layer struct {
 	Metadata   *Metadata
 	Content    []byte
+	State      idx.State
 	Commited   bool
 	Snapshoted bool
 }
@@ -58,55 +70,68 @@ type Bucket struct {
 	*sync.Mutex
 	service Service
 
-	header Header
+	lastHashedUid HashedBucketUid
+	header        Header
 	// Last layer Metadata
 	metadata *Metadata
-	layerIt  iter.Seq2[error, *Layer]
-	//layers     []*Layer
+
+	layerCount          int
+	layerIt             iter.Seq2[error, *Layer]
+	loadedBucketEntries map[int]*idx.Entry[HashedBucketUid, *BucketRef]
+	loadedMetadatas     map[int]*Metadata
+	loadedLayers        map[int]*Layer
 
 	data       []byte
 	stringData string
 	saved      bool
 }
 
-func newBucket(s Service, uid BucketUid, name string) *Bucket {
+func newBucket(s Service) *Bucket {
 	b := Bucket{
-		Mutex:   &sync.Mutex{},
-		service: s,
-		header: Header{
-			Uid:  uid,
-			Name: name,
-		},
+		Mutex:               &sync.Mutex{},
+		service:             s,
+		loadedBucketEntries: make(map[int]*idx.Entry[HashedBucketUid, *BucketRef]),
+		loadedMetadatas:     make(map[int]*Metadata),
+		loadedLayers:        make(map[int]*Layer),
 	}
 
 	return &b
 }
 
-func (b Bucket) ProjectBinary() (data []byte, err error) {
+func newNamedBucket(s Service, uid BucketUid, name string) *Bucket {
+	b := newBucket(s)
+	b.header = Header{
+		Uid:  uid,
+		Name: name,
+	}
+	return b
+}
+
+func (b *Bucket) LayerIt() iter.Seq2[error, *Layer] {
+	return b.layerIt
+}
+
+func (b *Bucket) ProjectBinary() (data []byte, err error) {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 
 	return b.projectBinary()
 }
 
-func (b Bucket) projectBinary() (data []byte, err error) {
+func (b *Bucket) projectBinary() (data []byte, err error) {
 	panic("not implemented yet")
 }
 
-func (b Bucket) ProjectText() (txt string, err error) {
+func (b *Bucket) ProjectText() (txt string, err error) {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 
-	return b.projectText()
+	return projectText(b)
 }
 
-func (b Bucket) projectText() (txt string, err error) {
-	panic("not implemented yet")
-}
-
-func (b *Bucket) Write(data []byte) error {
+func (b *Bucket) Write(data []byte) (int, error) {
 	if b.header.Mode == TextMode {
-		return fmt.Errorf("use WriteText for text mode bucket")
+		return -1, fmt.Errorf("use WriteText for text mode bucket")
 	}
 
 	b.Mutex.Lock()
@@ -116,7 +141,7 @@ func (b *Bucket) Write(data []byte) error {
 	}
 	b.data = data
 	b.saved = false
-	return nil
+	return len(data), nil
 }
 
 func (b *Bucket) WriteText(text string) error {
@@ -155,4 +180,32 @@ func (b *Bucket) Squash() error {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 	return b.service.squash(b)
+}
+
+func projectText(b *Bucket) (string, error) {
+	txt := ""
+	k := 1
+	for err, l := range b.LayerIt() {
+		if err != nil {
+			return "", fmt.Errorf("error iterating layer #%d: %w", k, err)
+		}
+		// First layer is root layer ?
+		// TODO: is layer a root layer ?
+		data, err := zip.UnzipString(l.Content)
+		if err != nil {
+			return "", fmt.Errorf("error decompressing layer #%d v%d: %w", k, l.Metadata.Version, err)
+		}
+		if idx.MatchFlag(l.State[0], RootLayerFlag) {
+			txt = data
+		} else if idx.MatchFlag(l.State[0], DiffLayerFlag) {
+			txt, err = PatchText(txt, data)
+			if err != nil {
+				return "", fmt.Errorf("error patching layer #%d v%d: %w", k, l.Metadata.Version, err)
+			}
+		} else {
+			panic("state not supported yet")
+		}
+		k++
+	}
+	return txt, nil
 }

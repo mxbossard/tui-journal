@@ -30,7 +30,7 @@ func TestAsciiEncoder(t *testing.T) {
 	assert.True(t, m)
 
 	expectedSeq := 3
-	expectedState := BuildState(expectedStateSize, "abcdefg")
+	expectedState := BuildStringState(expectedStateSize, "abcdefg")
 	expectedTime := time.Now()
 	key := []byte("key")
 	expectedKey := append(key, 0)
@@ -74,11 +74,11 @@ func TestAsciiEncoder(t *testing.T) {
 	assert.Equal(t, expectedText, text)
 
 	// Iterate with AsciiEncoder
-	expectedState1 := BuildState(expectedStateSize, "pif")
+	expectedState1 := BuildStringState(expectedStateSize, "pif")
 	expectedTime1 := time.Now()
-	expectedState2 := BuildState(expectedStateSize, "paf")
+	expectedState2 := BuildStringState(expectedStateSize, "paf")
 	expectedTime2 := time.Now()
-	expectedState3 := BuildState(expectedStateSize, "pof")
+	expectedState3 := BuildStringState(expectedStateSize, "pof")
 	expectedTime3 := time.Now()
 	key1 := []byte("k1")
 	expectedKey1 := append(key1, 0, 0)

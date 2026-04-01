@@ -1,47 +1,11 @@
 package bucket
 
 import (
-	"bytes"
-	"compress/zlib"
-	"io"
+	"fmt"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
-
-func ZlibCompressText(text string) ([]byte, error) {
-	var b bytes.Buffer
-	w, err := zlib.NewWriterLevel(&b, zlib.BestCompression)
-	if err != nil {
-		return nil, err
-	}
-	_, err = w.Write([]byte(text))
-	if err != nil {
-		return nil, err
-	}
-	err = w.Close()
-	if err != nil {
-		return nil, err
-	}
-	return b.Bytes(), nil
-}
-
-func ZlibDecompressText(data []byte) (string, error) {
-	dataReader := bytes.NewReader(data)
-	r, err := zlib.NewReader(dataReader)
-	if err != nil {
-		return "", err
-	}
-	var b bytes.Buffer
-	_, err = io.Copy(&b, r)
-	if err != nil {
-		return "", err
-	}
-	err = r.Close()
-	if err != nil {
-		return "", err
-	}
-	return b.String(), nil
-}
 
 func TextDiffPatch(txt1, txt2 string) (string, error) {
 	dmp := diffmatchpatch.New()
@@ -51,8 +15,25 @@ func TextDiffPatch(txt1, txt2 string) (string, error) {
 	return textPatch, nil
 }
 
+func PatchText(txt string, patches ...string) (string, error) {
+	dmp := diffmatchpatch.New()
+	var ok []bool
+	for _, patch := range patches {
+		diffPatch, err := dmp.PatchFromText(patch)
+		if err != nil {
+			return "", err
+		}
+
+		txt, ok = dmp.PatchApply(diffPatch, txt)
+		if !ok[0] {
+			return "", fmt.Errorf("unable to apply patch: [%s]", patch)
+		}
+	}
+	return txt, nil
+}
+
 func textPatchData(b *Bucket) ([]byte, error) {
-	storedText, err := b.projectText()
+	storedText, err := projectText(b)
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +45,6 @@ func textPatchData(b *Bucket) ([]byte, error) {
 	if len(textPatch) == 0 {
 		return nil, err
 	}
-	zipedPatch, err := ZlibCompressText(textPatch)
+	zipedPatch, err := zip.ZlibCompressText(textPatch)
 	return zipedPatch, err
 }

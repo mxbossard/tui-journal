@@ -12,6 +12,7 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/files"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/mxbossard/utilz/filez"
 )
 
@@ -28,21 +29,17 @@ const (
 	HeaderRefIdxPageSize  = 100
 	HeaderRefIdxQualifier = "headerRef"
 
-	BucketRefIdxStateSize = 8
+	BucketRefIdxStateSize = 2
 	BucketRefIdxKeySize   = 32
 	BucketRefIdxDataSize  = 1000 //FIXME
 	BucketRefIdxPageSize  = 100
 	BucketRefIdxQualifier = "bucketRef"
 
-	zlibCompressionMark = byte(1)
+	FirstLayerVersion = 1
 )
 
 var (
 	ErrNotExist = errors.New("bucket do not exists")
-)
-
-var (
-	dummyState = idx.BuildState(BucketNameIdxStateSize, "dummy")
 )
 
 var (
@@ -120,7 +117,7 @@ func (s *bucketService) New(name string, labels Labels) *Bucket {
 	uid := generateRandUid()
 	// FIXME: check if uid already exists
 
-	b := newBucket(s, uid, name)
+	b := newNamedBucket(s, uid, name)
 	b.header.changed = true
 	b.header.Labels = labels
 
@@ -131,20 +128,27 @@ func (s *bucketService) create(b *Bucket) error {
 	now := time.Now()
 
 	var data []byte
+	var dataLen int
 	switch b.header.Mode {
 	case BinaryMode:
 		data = b.data
+		dataLen = len(data)
 	case TextMode:
-		data = []byte(b.stringData)
+		zipedFullText, err := zip.ZipString(b.stringData)
+		if err != nil {
+			return fmt.Errorf("update: unable to zip full text: %w", err)
+		}
+		data = zipedFullText
+		dataLen = len(b.stringData)
 	}
 	if len(data) == 0 {
-		return fmt.Errorf("no data to save")
+		return fmt.Errorf("create: no data to save")
 	}
 
 	// TODO: 1- Add (name, uid) in bucketName Idx
 	_, err := s.bucketNameIdx.Add(dummyState, now, b.header.Name, b.header.Uid)
 	if err != nil {
-		return fmt.Errorf("unable to add bucket name: %w", err)
+		return fmt.Errorf("create: unable to add bucket name: %w", err)
 	}
 
 	// TODO: 3- store Header, Layer & Metadata
@@ -152,21 +156,22 @@ func (s *bucketService) create(b *Bucket) error {
 	headerRef, err := storeHeader(s.dir, s.device, &b.header)
 	if err != nil {
 		b.header.Created = nil
-		return err
+		return fmt.Errorf("create: unable to store header: %w", err)
 	}
-	layerRef, err := storeLayer(s.dir, s.device, data)
+
+	layerRef, err := storeLayerData(s.dir, s.device, data)
 	if err != nil {
-		return err
+		return fmt.Errorf("create: unable to store layer: %w", err)
 	}
 
 	metadata := Metadata{
-		Version: 0,
-		Size:    len(data),
+		Version: FirstLayerVersion,
+		Size:    dataLen,
 		Updated: &now,
 	}
 	metadataRef, err := storeMetadata(s.dir, s.device, &metadata)
 	if err != nil {
-		return err
+		return fmt.Errorf("create: unable to store metadata: %w", err)
 	}
 
 	// TODO; 4- build Refs
@@ -176,33 +181,38 @@ func (s *bucketService) create(b *Bucket) error {
 	}
 
 	// TODO: 5- Add (RhUid, headerRef) in headerRef Idx
-	entry, err := s.headerRefIdx.Add(dummyState, now, b.header.Uid, headerRef)
+	hrEntry, err := s.headerRefIdx.Add(dummyState, now, b.header.Uid, headerRef)
 	if err != nil {
-		return fmt.Errorf("unable to add header ref: %w", err)
+		return fmt.Errorf("create: unable to add header ref: %w", err)
 	}
-	hashedUid := HashedBucketUid(entry.BytesKey())
+	hashedUid := HashedBucketUid(hrEntry.BytesKey())
 
 	// TODO: 6- Add (HUid, bucketRef) in bucketRef Idx
-	_, err = s.bucketRefIdx.Add(dummyState, now, hashedUid, &bucketRef)
+	brEntry, err := s.bucketRefIdx.Add(RootLayerState, now, hashedUid, &bucketRef)
 	if err != nil {
-		return fmt.Errorf("unable to add bucket ref: %w", err)
+		return fmt.Errorf("create: unable to add bucket ref: %w", err)
+	}
+	// fmt.Printf("Added bucketRef for uid: %v / hash: %v\n", b.header.Uid, hashedUid)
+
+	l := Layer{
+		Metadata: &metadata,
+		Content:  data,
+		State:    brEntry.State(),
 	}
 
 	b.header.Created = &now
 	b.header.changed = false
 	b.metadata = &metadata
-	// var layerRefIt iter.Seq2[error, idx.Entry[HashedBucketUid, *LayerRef]] = func(yield func(error, idx.Entry[HashedBucketUid, *LayerRef]) bool) {
-	// 	entry := idx.NewEntry(hashedUid, layerRef, -1, now, dummyState, nil, entry.BytesKey())
-	// 	yield(nil, entry)
-	// }
-	var layerIt iter.Seq2[error, *Layer] = func(yield func(error, *Layer) bool) {
-		l := Layer{
-			Metadata: &metadata,
-			Content:  data,
-		}
-		yield(nil, &l)
+	b.lastHashedUid = hashedUid
+	b.layerCount = metadata.Version
+	b.loadedBucketEntries[metadata.Version] = &brEntry
+	b.loadedMetadatas[metadata.Version] = &metadata
+	b.loadedLayers[metadata.Version] = &l
+	b.layerIt, err = s.buildLayerIt(b)
+	if err != nil {
+		return err
 	}
-	b.layerIt = layerIt
+
 	return nil
 }
 
@@ -212,9 +222,11 @@ func (s *bucketService) update(b *Bucket) error {
 	// TODO: 1- Attempt to make a patch of the update.
 	var rootLayer, diffLayer bool
 	var data []byte
+	var dataLen int
 	switch b.header.Mode {
 	case BinaryMode:
 		data = b.data
+		dataLen = len(data)
 		// TODO: check if data changed
 		// TODO: store a bynary layer ?
 		// FIXME: add a binary append mode ?
@@ -222,21 +234,25 @@ func (s *bucketService) update(b *Bucket) error {
 		panic("not implemented yet")
 	case TextMode:
 		var err error
-		stored, err := b.projectText()
+		stored, err := projectText(b)
 		if err != nil {
-			return err
+			return fmt.Errorf("update: unable to project text: %w", err)
 		}
-		zipedPatch, err := zipedPatch(stored, b.stringData)
+		patch, err := TextDiffPatch(stored, b.stringData)
 		if err != nil {
-			return err
+			return fmt.Errorf("update: unable to make patch: %w", err)
+		}
+		zipedPatch, err := zip.ZipString(patch)
+		if err != nil {
+			return fmt.Errorf("update: unable to zip patch: %w", err)
 		}
 		if len(zipedPatch) == 0 {
 			// No diff => nothing to save
-			return fmt.Errorf("no data to save")
+			return fmt.Errorf("update: no data to save")
 		}
-		zipedFullText, err := ZlibCompressText(b.stringData)
+		zipedFullText, err := zip.ZipString(b.stringData)
 		if err != nil {
-			return err
+			return fmt.Errorf("update: unable to zip full text: %w", err)
 		}
 
 		if len(zipedPatch) > len(zipedFullText) {
@@ -244,44 +260,83 @@ func (s *bucketService) update(b *Bucket) error {
 			rootLayer = true
 			data = zipedFullText
 			// TODO
-			panic("not implemented yet")
+			// panic("not implemented yet")
 		} else {
 			// Store a diff layer
 			diffLayer = true
 			data = zipedPatch
 			// TODO
-			panic("not implemented yet")
+			// panic("not implemented yet")
 		}
+		dataLen = len(b.stringData)
 	}
 
 	newMetadata := &Metadata{
 		Version: b.metadata.Version + 1,
-		Size:    len(data),
+		Size:    dataLen,
 		Updated: &now,
 	}
 
-	newLayer := &Layer{
-		Metadata: newMetadata,
-		Content:  data,
-	}
+	hashedUid := b.lastHashedUid
 
 	// TODO: 2- Add (RhUid, headerRef) in headerRef Idx if Header changed
 	if b.header.changed {
-		// TODO
+		// TODO store header + headerRef
+		headerRef, err := storeHeader(s.dir, s.device, &b.header)
+		if err != nil {
+			return fmt.Errorf("update: unable store header: %w", err)
+		}
+		entry, err := s.headerRefIdx.Add(dummyState, now, b.header.Uid, headerRef)
+		if err != nil {
+			return fmt.Errorf("update: unable to add header ref: %w", err)
+		}
+		hashedUid = HashedBucketUid(entry.BytesKey())
 		panic("not implemented yet")
 	}
 
-	// TODO: 3- Create bucket layer + layerRef + metadataRef
+	// TODO: Store Layer + Metadata
+	var layerState idx.State
 	if rootLayer {
 		// TODO Index a root layer
-		_ = newLayer
+		layerState = RootLayerState
 	} else if diffLayer {
 		// TODO Index a diff layer
+		layerState = DiffLayerState
+	}
+
+	layerRef, err := storeLayerData(s.dir, s.device, data)
+	if err != nil {
+		return fmt.Errorf("update: unable store layer: %w", err)
+	}
+	metadataRef, err := storeMetadata(s.dir, s.device, newMetadata)
+	if err != nil {
+		return fmt.Errorf("update: unable store metadata: %w", err)
+	}
+
+	// TODO: 3- Create bucketRef (layerRef + metadataRef)
+	bucketRef := BucketRef{
+		MetadataRef: *metadataRef,
+		LayerRef:    *layerRef,
 	}
 
 	// TODO: 4- Add (HUid, bucketRef) in bucketRef Idx
-	panic("not implemented yet")
+	brEntry, err := s.bucketRefIdx.Add(layerState, now, hashedUid, &bucketRef)
+	if err != nil {
+		return fmt.Errorf("update: unable to add bucket ref: %w", err)
+	}
+	// fmt.Printf("Added bucketRef for uid: %v / hash: %v\n", b.header.Uid, hashedUid)
 
+	l := Layer{
+		Metadata: newMetadata,
+		Content:  data,
+		State:    brEntry.State(),
+	}
+
+	// panic("not implemented yet")
+	b.layerCount = newMetadata.Version
+	b.loadedBucketEntries[newMetadata.Version] = &brEntry
+	b.loadedMetadatas[newMetadata.Version] = newMetadata
+	b.loadedLayers[newMetadata.Version] = &l
 	b.header.changed = false
 	b.metadata = newMetadata
 	return nil
@@ -330,9 +385,9 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 	if err != nil {
 		return nil, err
 	}
+	// fmt.Printf("Loaded bucketRef for uid: %v / hash: %v\n", uid, lastBucketHashedUid)
 
 	// Use all layers until first root layer
-	var layers []*Layer
 	var lastMetadata *Metadata
 
 	for _, entry := range bucketPgnr.All() {
@@ -345,58 +400,21 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 			break
 		}
 	}
-	b := &Bucket{
-		service:  s,
-		header:   *lastHeader,
-		metadata: lastMetadata,
-		saved:    true,
+
+	b := newBucket(s)
+	b.lastHashedUid = lastBucketHashedUid
+	b.header = *lastHeader
+	b.metadata = lastMetadata
+	b.saved = true
+	b.layerIt, err = s.buildLayerIt(b)
+	if err != nil {
+		return nil, err
 	}
 
-	b.layerIt = func(yield func(error, *Layer) bool) {
-		bucketPgnr.Reset()
-		for err, entry := range bucketPgnr.All() {
-			if err != nil {
-				if !yield(fmt.Errorf("error iterating bucketRefIdx: %w", err), nil) {
-					break
-				}
-			}
-			metadata, err := loadMetadata(&entry.Val().MetadataRef)
-			if err != nil {
-				if !yield(err, nil) {
-					break
-				}
-			}
-
-			data, err := files.LoadBlocPart((*filez.BlocPart)(&entry.Val().LayerRef))
-			if err != nil {
-				if !yield(err, nil) {
-					break
-				}
-			}
-			l := Layer{
-				Metadata: metadata,
-				Content:  data,
-			}
-			layers = append(layers, &l)
-
-			if !yield(nil, &l) {
-				break
-			}
-		}
-
-	}
 	return b, nil
 }
 
 func (s *bucketService) Filter(f idx.Filter, o idx.Order, pageSize, preloadCount int) idx.Paginer[BucketUid, *Bucket] {
-	panic("not implemented yet")
-}
-
-func (s *bucketService) commit(b *Bucket) error {
-	panic("not implemented yet")
-}
-
-func (s *bucketService) squash(b *Bucket) error {
 	panic("not implemented yet")
 }
 
@@ -417,6 +435,74 @@ func (s *bucketService) Names() (map[string]BucketUid, error) {
 	}
 
 	return lastUidByNameMap, nil
+}
+
+func (s *bucketService) commit(b *Bucket) error {
+	panic("not implemented yet")
+}
+
+func (s *bucketService) squash(b *Bucket) error {
+	panic("not implemented yet")
+}
+
+func (s *bucketService) buildLayerIt(b *Bucket) (iter.Seq2[error, *Layer], error) {
+	// We want to iterate over last layers only, starting with the last root layer by default.
+	// We may have some layers already loaded in b.loadedLayers.
+	// Need to iterate over all layers metadata
+	// Load content only if necessary
+
+	bucketPgnr, err := s.bucketRefIdx.Paginate(b.lastHashedUid, idx.BottomToTop)
+	if err != nil {
+		return nil, err
+	}
+
+	// Eagerly load all Layer metadatas
+	for err, entry := range bucketPgnr.All() {
+		if err != nil {
+			return nil, fmt.Errorf("error iterating bucketRefIdx: %w", err)
+		}
+		metadata, err := loadMetadata(&entry.Val().MetadataRef)
+		if err != nil {
+
+		}
+		b.loadedBucketEntries[metadata.Version] = &entry
+		b.loadedMetadatas[metadata.Version] = metadata
+		b.layerCount = max(b.layerCount, metadata.Version)
+	}
+
+	// First implem : for now take all layers
+	firstVersion := FirstLayerVersion
+	return func(yield func(error, *Layer) bool) {
+		for v := firstVersion; v <= b.layerCount; v++ {
+			var ok bool
+			var l *Layer
+			if l, ok = b.loadedLayers[v]; !ok {
+				// Layer not already loaded
+				bucketEntry, ok := b.loadedBucketEntries[v]
+				if !ok {
+					panic(fmt.Sprintf("bucketEntry v%d not loaded", v))
+				}
+				// data, err := files.LoadBlocPart((*filez.BlocPart)(&(*bucketEntry).Val().LayerRef))
+				data, err := loadLayerData(&(*bucketEntry).Val().LayerRef)
+				if err != nil {
+					if !yield(err, nil) {
+						break
+					}
+				}
+				metadata := b.loadedMetadatas[v]
+				l = &Layer{
+					Metadata: metadata,
+					Content:  data,
+					State:    (*bucketEntry).State(),
+				}
+				b.loadedLayers[metadata.Version] = l
+			}
+
+			if !yield(nil, l) {
+				break
+			}
+		}
+	}, nil
 }
 
 func storeHeader(dir, device string, h *Header) (*HeaderRef, error) {
@@ -461,7 +547,7 @@ func storeMetadata(dir, device string, m *Metadata) (*MetadataRef, error) {
 	return &ref, nil
 }
 
-func storeLayer(dir, device string, data []byte) (*LayerRef, error) {
+func storeLayerData(dir, device string, data []byte) (*LayerRef, error) {
 	virtualBloc, err := files.StoreBlocData(dir, device, "layerData", data)
 	if err != nil {
 		return nil, err
@@ -492,7 +578,7 @@ func loadMetadata(ref *MetadataRef) (*Metadata, error) {
 	return metadataSerializer.Deserialize(b)
 }
 
-func loadLayer(ref *LayerRef) ([]byte, error) {
+func loadLayerData(ref *LayerRef) ([]byte, error) {
 	b, err := files.LoadBlocPart((*filez.BlocPart)(ref))
 	return b, err
 }
@@ -531,16 +617,4 @@ func generateRandUid() BucketUid {
 		panic(err)
 	}
 	return BucketUid(randBytes)
-}
-
-func zipedPatch(txt1, txt2 string) ([]byte, error) {
-	patch, err := TextDiffPatch(txt1, txt2)
-	if err != nil {
-		return nil, err
-	}
-	ziped, err := ZlibCompressText(patch)
-	if err != nil {
-		return nil, err
-	}
-	return append([]byte{zlibCompressionMark}, ziped...), nil
 }

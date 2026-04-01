@@ -76,11 +76,11 @@ var (
 	// dumpLayerRootState = idx.BuildState(index.LayerIdxStateSize, "dmp", "lyr", "root")
 	// dumpLayerDiffState = idx.BuildState(index.LayerIdxStateSize, "dmp", "lyr", "diff")
 
-	dumpType  = idx.BuildState(TypeStateLen, "dmp")
-	docType   = idx.BuildState(TypeStateLen, "doc")
-	layerForm = idx.BuildState(FormStateLen, "lyr")
-	rootKind  = idx.BuildState(KindStateLen, "root")
-	diffKind  = idx.BuildState(KindStateLen, "diff")
+	dumpType  = idx.BuildStringState(TypeStateLen, "dmp")
+	docType   = idx.BuildStringState(TypeStateLen, "doc")
+	layerForm = idx.BuildStringState(FormStateLen, "lyr")
+	rootKind  = idx.BuildStringState(KindStateLen, "root")
+	diffKind  = idx.BuildStringState(KindStateLen, "diff")
 
 	dumpState          = idx.CatState(index.BucketIdxStateSize, dumpType)
 	docState           = idx.CatState(index.BucketIdxStateSize, docType)

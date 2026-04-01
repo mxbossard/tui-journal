@@ -52,7 +52,7 @@ func TestBasicEncoder_EncodeDecode(t *testing.T) {
 	header := e1.Header()
 
 	expectedSeq := 3
-	expectedState := BuildState(expectedStateSize, "abcdefg")
+	expectedState := BuildStringState(expectedStateSize, "abcdefg")
 	expectedTime := time.Now()
 	key := []byte("key")
 	expectedKey := append(key, []byte{0, 0, 0, 0, 0}...)
@@ -111,11 +111,11 @@ func TestBasicEncoder_DecodeAll(t *testing.T) {
 	expectedValSize := 100
 
 	// Iterate with AsciiEncoder
-	expectedState1 := BuildState(expectedStateSize, "pif")
+	expectedState1 := BuildStringState(expectedStateSize, "pif")
 	expectedTime1 := time.Now()
-	expectedState2 := BuildState(expectedStateSize, "paf")
+	expectedState2 := BuildStringState(expectedStateSize, "paf")
 	expectedTime2 := time.Now()
-	expectedState3 := BuildState(expectedStateSize, "pof")
+	expectedState3 := BuildStringState(expectedStateSize, "pof")
 	expectedTime3 := time.Now()
 	key1 := []byte("k1")
 	expectedKey1 := append(key1, 0, 0)
@@ -198,11 +198,11 @@ func TestBasicEncoder_DecodeLastWord(t *testing.T) {
 	expectedValSize := 100
 
 	// Iterate with AsciiEncoder
-	expectedState1 := BuildState(expectedStateSize, "pif")
+	expectedState1 := BuildStringState(expectedStateSize, "pif")
 	expectedTime1 := time.Now()
-	expectedState2 := BuildState(expectedStateSize, "paf")
+	expectedState2 := BuildStringState(expectedStateSize, "paf")
 	expectedTime2 := time.Now()
-	expectedState3 := BuildState(expectedStateSize, "pof")
+	expectedState3 := BuildStringState(expectedStateSize, "pof")
 	expectedTime3 := time.Now()
 	key1 := []byte("k1")
 	key2 := []byte("k2")

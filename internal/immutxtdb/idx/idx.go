@@ -131,6 +131,9 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 	i.Lock()
 	defer i.Unlock()
 
+	truncatedTime := t.Truncate(24 * time.Hour)
+	normalizedState := CatState(i.encoder.StateSize(), s)
+
 	var err error
 	var ok bool
 	var key []byte
@@ -144,7 +147,7 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 		panic("cannot convert key to []byte, need a keySerializer")
 	}
 
-	bf := i.selectDeviceBlocFile(s, k)
+	bf := i.selectDeviceBlocFile(normalizedState, k)
 	bfName := bf.Name()
 	seq := i.seqs[bfName]
 
@@ -173,19 +176,19 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 		}
 	}
 
-	entry, err := i.encoder.Encode(seq, t, s, key, val)
+	data, err := i.encoder.Encode(seq, truncatedTime, normalizedState, key, val)
 	if err != nil {
-		return nil, fmt.Errorf("error encoding entry: %w", err)
+		return nil, fmt.Errorf("error encoding data: %w", err)
 	}
 
 	//fmt.Printf("writing encoded content (#%d, uid: %s): %v\n", seq, uid, entry)
 	bw := bf.Writer()
-	_, err = bw.Write(entry)
+	_, err = bw.Write(data)
 	if err != nil {
-		return nil, fmt.Errorf("error writing entry: %w", err)
+		return nil, fmt.Errorf("error writing data: %w", err)
 	}
 	i.seqs[bfName] = seq + 1
-	return NewEntry(k, v, seq, t, s, nil, key), nil
+	return NewEntry(k, v, seq, truncatedTime, normalizedState, nil, key), nil
 }
 
 func (i *basicIndex[K, V]) Count() (int, error) {

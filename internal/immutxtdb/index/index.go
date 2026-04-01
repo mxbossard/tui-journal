@@ -14,8 +14,8 @@ const (
 )
 
 var (
-	Document = idx.BuildState(asciiEncoderStateSize, "doc")
-	Dump     = idx.BuildState(asciiEncoderStateSize, "dmp")
+	Document = idx.BuildStringState(asciiEncoderStateSize, "doc")
+	Dump     = idx.BuildStringState(asciiEncoderStateSize, "dmp")
 )
 
 type gobSerializer[T any] struct {

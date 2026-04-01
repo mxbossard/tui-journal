@@ -18,19 +18,35 @@ func TestBasicIndex_Add(t *testing.T) {
 
 	expectedPageSize := 10
 	expectedState := dummyState
-	expectedTime := time.Now()
+	expectedStateLen := len(expectedState) + 2
+	now := time.Now()
+	expectedTime := now.Truncate(24 * time.Hour)
 	expectedKeySize := 8
+	key := "k1"
+	expectedKey := make([]byte, expectedKeySize)
+	copy(expectedKey, key)
+	expectedVal := "foo"
+
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc := NewAsciiEncoder(0, expectedStateLen, expectedKeySize, 100)
 	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
 	assert.Implements(t, (*Index[string, string])(nil), bIdx)
 
-	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
+	entry, err := bIdx.Add(expectedState, now, key, expectedVal)
+
 	assert.NoError(t, err)
+	require.NotNil(t, entry)
+	assert.Equal(t, 0, entry.Seq())
+	assert.Equal(t, expectedTime, entry.Time())
+	assert.Equal(t, CatState(expectedStateLen, expectedState), entry.State())
+	assert.Equal(t, key, entry.Key())
+	assert.Equal(t, expectedKey, entry.BytesKey())
+	assert.Equal(t, expectedVal, entry.Val())
+	assert.Equal(t, nil, entry.Error())
 }
 
 func TestBasicIndex_Count(t *testing.T) {
@@ -373,9 +389,9 @@ func TestBasicIndex_Filter(t *testing.T) {
 
 	expectedPageSize := 10
 	expectedStateLen := 8
-	expectedState1 := BuildState(expectedStateLen, "state1")
-	expectedState2 := BuildState(expectedStateLen, "state2")
-	expectedState3 := BuildState(expectedStateLen, "state3")
+	expectedState1 := BuildStringState(expectedStateLen, "state1")
+	expectedState2 := BuildStringState(expectedStateLen, "state2")
+	expectedState3 := BuildStringState(expectedStateLen, "state3")
 	time1, err := time.Parse(YYYYMMDD, "2026-03-15")
 	require.NoError(t, err)
 	time2, err := time.Parse(YYYYMMDD, "2026-03-16")

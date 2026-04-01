@@ -5,16 +5,18 @@
 - [x] Bucket & Layer indexs first impl
 - [x] Document & Text indexs first impl
 - [x] Time index first impl
+- [_] Implem Bucket service
+- [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
-- [_] Implement RotatingHash, who's responsability ?
-- [_] Validate idx errChan usage
-- [_] Implem idx Filter methods
-- [_] A first text diff/layering impl (use a version / impl qualifier ?)
+- [x] Implement RotatingHash, who's responsability ?
+- [x] Validate idx errChan usage
+- [x] Implem idx Filter methods
+- [x] A first text diff/layering impl (use a version / impl qualifier ?)
 - [_] Manage preloading of idx files ?
 - [_] Do we need to optimize "file reading stop" at snapshot layer ? Could provide a func to decide "preloading stop".
 - [_] Encryption of BlocsFiles impl
-- [_] Rotating Hash impl
 - [_] Randomly generated SecretKey ciphered with user passphrase
+- [_] Bucket squashing
 
 
 ## Purpose

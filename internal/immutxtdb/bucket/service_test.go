@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/mxbossard/utilz/collectionz"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/ztring"
@@ -47,6 +48,8 @@ func TestBucketService_Save(t *testing.T) {
 	expectedSalt := "salt"
 	expectedName := "foo"
 	expectedMsg := ztring.LoremIpsumWords(10)
+	expectedZipedMsg, err := zip.ZipString(expectedMsg)
+	require.NoError(t, err)
 	expectedLabels := Labels{
 		"foo": "pif0",
 		"bar": "paf0",
@@ -87,16 +90,16 @@ func TestBucketService_Save(t *testing.T) {
 	assert.Equal(t, len([]byte(expectedMsg)), bkt.metadata.Size)
 	assert.Equal(t, *bkt.header.Created, *bkt.metadata.Updated)
 	assert.Greater(t, after, *bkt.metadata.Updated)
-	assert.Equal(t, 0, bkt.metadata.Version)
+	assert.Equal(t, FirstLayerVersion, bkt.metadata.Version)
 
 	// Check Root Layer
-	require.NotNil(t, bkt.layerIt)
+	require.NotNil(t, bkt.LayerIt())
 	k := 0
-	for err, l := range bkt.layerIt {
+	for err, l := range bkt.LayerIt() {
 		k++
 		assert.NoError(t, err)
 		assert.NotNil(t, l)
-		assert.Equal(t, []byte(expectedMsg), l.Content)
+		assert.Equal(t, expectedZipedMsg, l.Content)
 	}
 	assert.Equal(t, 1, k)
 
@@ -111,6 +114,8 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	expectedSalt := "salt"
 	expectedName := "foo"
 	expectedMsg := ztring.LoremIpsumWords(10)
+	expectedZipedMsg, err := zip.ZipString(expectedMsg)
+	require.NoError(t, err)
 	expectedLabels := Labels{
 		"foo": "pif",
 		"bar": "paf",
@@ -150,13 +155,13 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	require.NotNil(t, bkt2.metadata.Updated)
 	assert.Less(t, before, *bkt2.metadata.Updated)
 	assert.Greater(t, after, *bkt2.metadata.Updated)
-	assert.Equal(t, 0, bkt2.metadata.Version)
+	assert.Equal(t, FirstLayerVersion, bkt2.metadata.Version)
 
 	// Check Root Layer
-	require.NotNil(t, bkt2.layerIt)
+	require.NotNil(t, bkt2.LayerIt())
 	var rootLayer1, rootLayer2 *Layer
 	k := 0
-	for err, l := range bkt1.layerIt {
+	for err, l := range bkt1.LayerIt() {
 		k++
 		assert.NoError(t, err)
 		assert.NotNil(t, l)
@@ -164,7 +169,7 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	}
 	assert.Equal(t, 1, k)
 	k = 0
-	for err, l := range bkt2.layerIt {
+	for err, l := range bkt2.LayerIt() {
 		k++
 		assert.NoError(t, err)
 		require.NotNil(t, l)
@@ -172,9 +177,9 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	}
 	assert.Equal(t, 1, k)
 
-	assert.Equal(t, []byte(expectedMsg), rootLayer2.Content)
-	assert.Equal(t, 0, rootLayer2.Metadata.Version)
-	assert.Equal(t, len([]byte(expectedMsg)), rootLayer2.Metadata.Size)
+	assert.Equal(t, expectedZipedMsg, rootLayer2.Content)
+	assert.Equal(t, FirstLayerVersion, rootLayer2.Metadata.Version)
+	assert.Equal(t, len(expectedMsg), rootLayer2.Metadata.Size)
 	require.NotNil(t, rootLayer2.Metadata.Updated)
 	assert.Less(t, before, *rootLayer2.Metadata.Updated)
 	assert.Greater(t, after, *rootLayer2.Metadata.Updated)
@@ -255,6 +260,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	bkt1 := svc.New(expectedName, expectedLabels)
 	assert.NotNil(t, bkt1)
 
+	// First write
 	err = bkt1.WriteText(expectedMsg1)
 	assert.NoError(t, err)
 
@@ -263,14 +269,41 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.NoError(t, err)
 	after1 := time.Now()
 
+	// Check Metadata
+	require.NotNil(t, bkt1.metadata)
+	assert.Equal(t, FirstLayerVersion, bkt1.metadata.Version)
+	assert.Equal(t, len(expectedMsg1), bkt1.metadata.Size)
+	// assert.Equal(t, nil, bkt1.metadata.Updated)
+	assert.Less(t, before1, *bkt1.metadata.Updated)
+	assert.Greater(t, after1, *bkt1.metadata.Updated)
+
+	// Check text projection
+	text, err := bkt1.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg1, text)
+
 	err = bkt1.WriteText(expectedMsg2)
 	assert.NoError(t, err)
 
+	// Second write
 	before2 := time.Now()
 	err = bkt1.Save()
 	assert.NoError(t, err)
 	after2 := time.Now()
 
+	// Check Metadata
+	require.NotNil(t, bkt1.metadata)
+	assert.Equal(t, FirstLayerVersion+1, bkt1.metadata.Version)
+	assert.Equal(t, len(expectedMsg2), bkt1.metadata.Size)
+	assert.Less(t, before2, *bkt1.metadata.Updated)
+	assert.Greater(t, after2, *bkt1.metadata.Updated)
+
+	// Check text projection
+	text, err = bkt1.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg2, text)
+
+	// Get the Bucket
 	bkt2, err := svc.Get(bkt1.header.Uid)
 	assert.NoError(t, err)
 	require.NotNil(t, bkt2)
@@ -283,67 +316,74 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.Equal(t, expectedLabels, bkt2.header.Labels)
 
 	// Check Metadata
-	require.NotNil(t, bkt1.metadata)
 	require.NotNil(t, bkt2.metadata)
-	// Use ExportedValues comparison because of time.Time comparison not working (some private fields are not the same)
-	assert.EqualExportedValues(t, *bkt1.metadata, *bkt2.metadata)
+	assert.Equal(t, FirstLayerVersion+1, bkt2.metadata.Version)
 	assert.Equal(t, len(expectedMsg2), bkt2.metadata.Size)
-	require.NotNil(t, bkt2.metadata.Updated)
 	assert.Less(t, before2, *bkt2.metadata.Updated)
 	assert.Greater(t, after2, *bkt2.metadata.Updated)
-	assert.Equal(t, 0, bkt2.metadata.Version)
 
-	// Check Root Layer
-	require.NotNil(t, bkt2.layerIt)
+	// Check Layers
+	require.NotNil(t, bkt2.LayerIt())
 	var bkt1Layers, bkt2Layers []*Layer
 	k := 0
-	for err, l := range bkt1.layerIt {
-		k++
+	for err, l := range bkt1.LayerIt() {
 		assert.NoError(t, err)
 		assert.NotNil(t, l)
-		if k == 0 {
-			assert.Equal(t, []byte(expectedMsg2), l.Content)
-		}
-		if k == 1 {
-			assert.Equal(t, []byte(expectedMsg1), l.Content)
-		}
+		// if k == 0 {
+		// 	assert.Equal(t, []byte(expectedMsg2), l.Content)
+		// }
+		// if k == 1 {
+		// 	assert.Equal(t, []byte(expectedMsg1), l.Content)
+		// }
 		bkt1Layers = append(bkt1Layers, l)
+		k++
 	}
 	assert.Equal(t, 2, k)
 	k = 0
-	for err, l := range bkt2.layerIt {
-		k++
+	for err, l := range bkt2.LayerIt() {
+
 		assert.NoError(t, err)
 		require.NotNil(t, l)
-		if k == 0 {
-			assert.Equal(t, []byte(expectedMsg2), l.Content)
-		}
-		if k == 1 {
-			assert.Equal(t, []byte(expectedMsg1), l.Content)
-		}
+		// if k == 0 {
+		// 	assert.Equal(t, []byte(expectedMsg2), l.Content)
+		// }
+		// if k == 1 {
+		// 	assert.Equal(t, []byte(expectedMsg1), l.Content)
+		// }
 		bkt2Layers = append(bkt2Layers, l)
+		k++
 	}
 	assert.Equal(t, 2, k)
 
 	require.True(t, len(bkt1Layers) >= 1)
-	assert.Equal(t, []byte(expectedMsg2), bkt1Layers[0].Content)
-	assert.Equal(t, 0, bkt1Layers[0].Metadata.Version)
-	assert.Equal(t, len([]byte(expectedMsg2)), bkt1Layers[0].Metadata.Size)
+	// assert.Equal(t, []byte(expectedMsg2), bkt1Layers[0].Content)
+	assert.Equal(t, 1, bkt1Layers[0].Metadata.Version)
+	assert.Equal(t, len(expectedMsg1), bkt1Layers[0].Metadata.Size)
 	require.NotNil(t, bkt1Layers[0].Metadata.Updated)
-	assert.Less(t, before2, *bkt1Layers[0].Metadata.Updated)
-	assert.Greater(t, after2, *bkt1Layers[0].Metadata.Updated)
+	assert.Less(t, before1, *bkt1Layers[0].Metadata.Updated)
+	assert.Greater(t, after1, *bkt1Layers[0].Metadata.Updated)
 
 	require.True(t, len(bkt1Layers) >= 2)
-	assert.Equal(t, []byte(expectedMsg1), bkt1Layers[1].Content)
-	assert.Equal(t, 0, bkt1Layers[1].Metadata.Version)
-	assert.Equal(t, len([]byte(expectedMsg1)), bkt1Layers[1].Metadata.Size)
+	// assert.Equal(t, []byte(expectedMsg1), bkt1Layers[1].Content)
+	assert.Equal(t, 2, bkt1Layers[1].Metadata.Version)
+	assert.Equal(t, len(expectedMsg2), bkt1Layers[1].Metadata.Size)
 	require.NotNil(t, bkt1Layers[1].Metadata.Updated)
-	assert.Less(t, before1, *bkt1Layers[1].Metadata.Updated)
-	assert.Greater(t, after1, *bkt1Layers[1].Metadata.Updated)
+	assert.Less(t, before2, *bkt1Layers[1].Metadata.Updated)
+	assert.Greater(t, after2, *bkt1Layers[1].Metadata.Updated)
 
 	// Use ExportedValues comparison because of time.Time comparison not working (some private fields are not the same)
 	assert.EqualExportedValues(t, bkt1Layers[0], bkt2Layers[0])
 	assert.EqualExportedValues(t, bkt1Layers[1], bkt2Layers[1])
+
+	// Check text projections
+	text, err = bkt1.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg2, text)
+
+	text, err = bkt2.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg2, text)
+
 }
 
 func TestBucketService_Save_Get_Edit_Save_Get(t *testing.T) {
