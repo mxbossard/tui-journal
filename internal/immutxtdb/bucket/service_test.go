@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/mxbossard/utilz/collectionz"
 	"github.com/mxbossard/utilz/filez"
@@ -393,9 +394,91 @@ func TestBucketService_Save_Get_Edit_Save_Get(t *testing.T) {
 	// TODO
 }
 
-func TestBucketService_Project(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Project")
+func dayTime(value string) *time.Time {
+	t, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		panic(err)
+	}
+	return &t
+}
+
+func TestBucketService_Filter(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Filter")
 	defer os.RemoveAll(tmpDir)
 
-	// TODO
+	expectedDevice := "device"
+	expectedSalt := "salt"
+	expectedName1 := "foo1"
+	expectedName2 := "foo2"
+	expectedName3 := "bar3"
+	expectedName4 := "bar4"
+	expectedName5 := "foo5"
+	expectedMsg1 := ztring.LoremIpsumWords(5)
+	expectedMsg2 := ztring.LoremIpsumWords(10)
+	expectedMsg3 := ztring.LoremIpsumWords(15)
+	expectedMsg4 := ztring.LoremIpsumWords(20)
+	expectedMsg5 := ztring.LoremIpsumWords(25)
+
+	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	bkt1, err := svc.NewText(expectedName1, nil, expectedMsg1)
+	assert.NoError(t, err)
+	assert.NotNil(t, bkt1)
+	day1 := dayTime("2026-03-01")
+	bkt1.header.Created = day1
+	err = bkt1.Save()
+	assert.NoError(t, err)
+
+	bkt2, err := svc.NewText(expectedName2, nil, expectedMsg2)
+	assert.NoError(t, err)
+	assert.NotNil(t, bkt2)
+	day2 := dayTime("2026-03-02")
+	bkt2.header.Created = day2
+	err = bkt2.Save()
+	assert.NoError(t, err)
+
+	bkt3, err := svc.NewText(expectedName3, nil, expectedMsg3)
+	assert.NoError(t, err)
+	assert.NotNil(t, bkt3)
+	day3 := dayTime("2026-03-03")
+	bkt3.header.Created = day3
+	err = bkt3.Save()
+	assert.NoError(t, err)
+
+	bkt4, err := svc.NewText(expectedName4, nil, expectedMsg4)
+	assert.NoError(t, err)
+	assert.NotNil(t, bkt4)
+	day4 := dayTime("2026-03-04")
+	bkt4.header.Created = day4
+	err = bkt4.Save()
+	assert.NoError(t, err)
+
+	bkt5, err := svc.NewText(expectedName5, nil, expectedMsg5)
+	assert.NoError(t, err)
+	assert.NotNil(t, bkt5)
+	day5 := dayTime("2026-03-05")
+	bkt5.header.Created = day5
+	err = bkt5.Save()
+	assert.NoError(t, err)
+
+	f := idx.AndFilter(idx.BeforeFilter(*day5), idx.AfterFilter(*day1))
+	pgnr, err := svc.Filter(idx.TopToBottom, f, 1, 1)
+	assert.NoError(t, err)
+	require.NotNil(t, pgnr)
+
+	k := 0
+	for _, b := range pgnr.All() {
+		switch k {
+		case 0:
+			assert.Equal(t, expectedName2, b.Val().header.Name)
+		case 1:
+			assert.Equal(t, expectedName3, b.Val().header.Name)
+		case 2:
+			assert.Equal(t, expectedName4, b.Val().header.Name)
+		}
+		k++
+	}
+	assert.Equal(t, 3, k)
 }
