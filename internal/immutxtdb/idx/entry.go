@@ -7,7 +7,7 @@ import (
 
 type Entry[K comparable, V any] interface {
 	Key() K
-	BytesKey() []byte
+	KeyBytes() []byte
 	Val() V
 	Seq() int
 	Time() time.Time
@@ -22,7 +22,7 @@ type BasicEntry[K comparable, V any] struct {
 	time     time.Time
 	state    State
 	err      error
-	bytesKey []byte
+	keyBytes []byte
 }
 
 func NewEntry[K comparable, V any](key K, val V, seq int, time time.Time, state State, err error, bKey []byte) *BasicEntry[K, V] {
@@ -33,7 +33,7 @@ func NewEntry[K comparable, V any](key K, val V, seq int, time time.Time, state 
 		time:     time,
 		state:    state,
 		err:      err,
-		bytesKey: bKey,
+		keyBytes: bKey,
 	}
 	return e
 }
@@ -62,8 +62,8 @@ func (e BasicEntry[K, V]) Key() K {
 	return k
 }
 
-func (e BasicEntry[K, V]) BytesKey() []byte {
-	return e.bytesKey
+func (e BasicEntry[K, V]) KeyBytes() []byte {
+	return e.keyBytes
 }
 
 func (e BasicEntry[K, V]) Val() V {

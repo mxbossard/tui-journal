@@ -17,6 +17,9 @@ const (
 
 	RootLayerFlag = 0x1
 	DiffLayerFlag = 0x2
+
+	FirstLayerVersion = Version(1)
+	LatestVersion     = Version(0)
 )
 
 var (
@@ -27,10 +30,11 @@ var (
 
 type BucketUid [16]byte
 type Labels map[string]string
+type Version int
 
 // Store Layer Metadata
 type Metadata struct {
-	Version int
+	Version Version
 	Updated *time.Time
 	Size    int
 }
@@ -54,8 +58,7 @@ type Header struct {
 	changed bool
 }
 
-// Match SHA256 ?
-type HashedBucketUid [32]byte
+type HashedBucketUid [32]byte // Match SHA256
 
 type MetadataRef filez.BlocPart
 type LayerRef filez.BlocPart
@@ -75,11 +78,11 @@ type Bucket struct {
 	// Last layer Metadata
 	metadata *Metadata
 
-	layerCount          int
+	latestVersion       Version
 	layerIt             iter.Seq2[error, *Layer]
-	loadedBucketEntries map[int]*idx.Entry[HashedBucketUid, *BucketRef]
-	loadedMetadatas     map[int]*Metadata
-	loadedLayers        map[int]*Layer
+	loadedBucketEntries map[Version]*idx.Entry[HashedBucketUid, *BucketRef]
+	loadedMetadatas     map[Version]*Metadata
+	loadedLayers        map[Version]*Layer
 
 	data       []byte
 	stringData string
@@ -90,9 +93,9 @@ func newBucket(s Service) *Bucket {
 	b := Bucket{
 		Mutex:               &sync.Mutex{},
 		service:             s,
-		loadedBucketEntries: make(map[int]*idx.Entry[HashedBucketUid, *BucketRef]),
-		loadedMetadatas:     make(map[int]*Metadata),
-		loadedLayers:        make(map[int]*Layer),
+		loadedBucketEntries: make(map[Version]*idx.Entry[HashedBucketUid, *BucketRef]),
+		loadedMetadatas:     make(map[Version]*Metadata),
+		loadedLayers:        make(map[Version]*Layer),
 	}
 
 	return &b
@@ -111,22 +114,22 @@ func (b *Bucket) LayerIt() iter.Seq2[error, *Layer] {
 	return b.layerIt
 }
 
-func (b *Bucket) ProjectBinary() (data []byte, err error) {
+func (b *Bucket) ProjectBinary(version Version) (data []byte, err error) {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 
-	return b.projectBinary()
+	return b.projectBinary(version)
 }
 
-func (b *Bucket) projectBinary() (data []byte, err error) {
+func (b *Bucket) projectBinary(version Version) (data []byte, err error) {
 	panic("not implemented yet")
 }
 
-func (b *Bucket) ProjectText() (txt string, err error) {
+func (b *Bucket) ProjectText(version Version) (txt string, err error) {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 
-	return projectText(b)
+	return projectText(b, version)
 }
 
 func (b *Bucket) Write(data []byte) (int, error) {
@@ -182,7 +185,7 @@ func (b *Bucket) Squash() error {
 	return b.service.squash(b)
 }
 
-func projectText(b *Bucket) (string, error) {
+func projectText(b *Bucket, version Version) (string, error) {
 	txt := ""
 	k := 1
 	for err, l := range b.LayerIt() {

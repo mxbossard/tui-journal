@@ -287,7 +287,7 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 
 	// 6- Forge the root layer iterator
 	var layerRefIt iter.Seq2[error, idx.Entry[*model.HashedBucketUid, *model.LayerRef]] = func(yield func(error, idx.Entry[*model.HashedBucketUid, *model.LayerRef]) bool) {
-		entry := idx.NewEntry(&hUid, rootLayerRef, -1, now, dumpRootLayerState, nil, e.BytesKey())
+		entry := idx.NewEntry(&hUid, rootLayerRef, -1, now, dumpRootLayerState, nil, e.KeyBytes())
 		yield(nil, entry)
 	}
 

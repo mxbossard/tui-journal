@@ -279,7 +279,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.Greater(t, after1, *bkt1.metadata.Updated)
 
 	// Check text projection
-	text, err := bkt1.ProjectText()
+	text, err := bkt1.ProjectText(LatestVersion)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg1, text)
 
@@ -300,7 +300,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.Greater(t, after2, *bkt1.metadata.Updated)
 
 	// Check text projection
-	text, err = bkt1.ProjectText()
+	text, err = bkt1.ProjectText(LatestVersion)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg2, text)
 
@@ -358,7 +358,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 
 	require.True(t, len(bkt1Layers) >= 1)
 	// assert.Equal(t, []byte(expectedMsg2), bkt1Layers[0].Content)
-	assert.Equal(t, 1, bkt1Layers[0].Metadata.Version)
+	assert.Equal(t, Version(1), bkt1Layers[0].Metadata.Version)
 	assert.Equal(t, len(expectedMsg1), bkt1Layers[0].Metadata.Size)
 	require.NotNil(t, bkt1Layers[0].Metadata.Updated)
 	assert.Less(t, before1, *bkt1Layers[0].Metadata.Updated)
@@ -366,7 +366,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 
 	require.True(t, len(bkt1Layers) >= 2)
 	// assert.Equal(t, []byte(expectedMsg1), bkt1Layers[1].Content)
-	assert.Equal(t, 2, bkt1Layers[1].Metadata.Version)
+	assert.Equal(t, Version(2), bkt1Layers[1].Metadata.Version)
 	assert.Equal(t, len(expectedMsg2), bkt1Layers[1].Metadata.Size)
 	require.NotNil(t, bkt1Layers[1].Metadata.Updated)
 	assert.Less(t, before2, *bkt1Layers[1].Metadata.Updated)
@@ -377,11 +377,11 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.EqualExportedValues(t, bkt1Layers[1], bkt2Layers[1])
 
 	// Check text projections
-	text, err = bkt1.ProjectText()
+	text, err = bkt1.ProjectText(LatestVersion)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg2, text)
 
-	text, err = bkt2.ProjectText()
+	text, err = bkt2.ProjectText(LatestVersion)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg2, text)
 

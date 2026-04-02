@@ -34,8 +34,6 @@ const (
 	BucketRefIdxDataSize  = 1000 //FIXME
 	BucketRefIdxPageSize  = 100
 	BucketRefIdxQualifier = "bucketRef"
-
-	FirstLayerVersion = 1
 )
 
 var (
@@ -193,7 +191,7 @@ func (s *bucketService) create(b *Bucket) error {
 	if err != nil {
 		return fmt.Errorf("create: unable to add header ref: %w", err)
 	}
-	hashedUid := HashedBucketUid(hrEntry.BytesKey())
+	hashedUid := HashedBucketUid(hrEntry.KeyBytes())
 
 	// TODO: 6- Add (HUid, bucketRef) in bucketRef Idx
 	brEntry, err := s.bucketRefIdx.Add(RootLayerState, *b.header.Created, hashedUid, &bucketRef)
@@ -211,7 +209,7 @@ func (s *bucketService) create(b *Bucket) error {
 	b.header.changed = false
 	b.metadata = &metadata
 	b.lastHashedUid = hashedUid
-	b.layerCount = metadata.Version
+	b.latestVersion = metadata.Version
 	b.loadedBucketEntries[metadata.Version] = &brEntry
 	b.loadedMetadatas[metadata.Version] = &metadata
 	b.loadedLayers[metadata.Version] = &l
@@ -241,7 +239,7 @@ func (s *bucketService) update(b *Bucket) error {
 		panic("not implemented yet")
 	case TextMode:
 		var err error
-		stored, err := projectText(b)
+		stored, err := projectText(b, LatestVersion)
 		if err != nil {
 			return fmt.Errorf("update: unable to project text: %w", err)
 		}
@@ -297,7 +295,7 @@ func (s *bucketService) update(b *Bucket) error {
 		if err != nil {
 			return fmt.Errorf("update: unable to add header ref: %w", err)
 		}
-		hashedUid = HashedBucketUid(entry.BytesKey())
+		hashedUid = HashedBucketUid(entry.KeyBytes())
 		panic("not implemented yet")
 	}
 
@@ -340,7 +338,7 @@ func (s *bucketService) update(b *Bucket) error {
 	}
 
 	// panic("not implemented yet")
-	b.layerCount = newMetadata.Version
+	b.latestVersion = newMetadata.Version
 	b.loadedBucketEntries[newMetadata.Version] = &brEntry
 	b.loadedMetadatas[newMetadata.Version] = newMetadata
 	b.loadedLayers[newMetadata.Version] = &l
@@ -373,7 +371,7 @@ func getLastBucketHeader(paginer idx.Paginer[BucketUid, *HeaderRef]) (*Header, *
 		if err != nil {
 			return nil, nil, err
 		}
-		lastBucketHashedUid = HashedBucketUid(entry.BytesKey())
+		lastBucketHashedUid = HashedBucketUid(entry.KeyBytes())
 		// Keep only last bucket header found
 		break
 	}
@@ -467,7 +465,7 @@ func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageC
 					break
 				}
 			}
-			lastBucketHashedUid := HashedBucketUid(headerEntry.BytesKey())
+			lastBucketHashedUid := HashedBucketUid(headerEntry.KeyBytes())
 			b, err := s.buildLazyBucket(lastHeader, &lastBucketHashedUid)
 			builtBuckets[headerEntry.Key()] = b
 			if !push(idx.NewEntry(headerEntry.Key(), b, headerEntry.Seq(), headerEntry.Time(), headerEntry.State(), err, lastBucketHashedUid[:])) {
@@ -526,13 +524,13 @@ func (s *bucketService) buildLayerIt(b *Bucket) (iter.Seq2[error, *Layer], error
 		}
 		b.loadedBucketEntries[metadata.Version] = &entry
 		b.loadedMetadatas[metadata.Version] = metadata
-		b.layerCount = max(b.layerCount, metadata.Version)
+		b.latestVersion = max(b.latestVersion, metadata.Version)
 	}
 
 	// First implem : for now take all layers
 	firstVersion := FirstLayerVersion
 	return func(yield func(error, *Layer) bool) {
-		for v := firstVersion; v <= b.layerCount; v++ {
+		for v := firstVersion; v <= b.latestVersion; v++ {
 			var ok bool
 			var l *Layer
 			if l, ok = b.loadedLayers[v]; !ok {

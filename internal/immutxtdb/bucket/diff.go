@@ -33,7 +33,7 @@ func PatchText(txt string, patches ...string) (string, error) {
 }
 
 func textPatchData(b *Bucket) ([]byte, error) {
-	storedText, err := projectText(b)
+	storedText, err := projectText(b, LatestVersion)
 	if err != nil {
 		return nil, err
 	}

@@ -44,7 +44,7 @@ func TestBasicIndex_Add(t *testing.T) {
 	assert.Equal(t, expectedTime, entry.Time())
 	assert.Equal(t, CatState(expectedStateLen, expectedState), entry.State())
 	assert.Equal(t, key, entry.Key())
-	assert.Equal(t, expectedKey, entry.BytesKey())
+	assert.Equal(t, expectedKey, entry.KeyBytes())
 	assert.Equal(t, expectedVal, entry.Val())
 	assert.Equal(t, nil, entry.Error())
 }
@@ -376,10 +376,10 @@ func TestBasicIndex_HashedPaginate(t *testing.T) {
 
 	entries := page.Entries()
 	hK0, err := keyRot(0, []byte("k1"))
-	assert.Equal(t, hK0, entries[0].BytesKey())
+	assert.Equal(t, hK0, entries[0].KeyBytes())
 	assert.Equal(t, "foo", entries[0].Val())
 	hK3, err := keyRot(3, []byte("k1"))
-	assert.Equal(t, hK3, entries[1].BytesKey())
+	assert.Equal(t, hK3, entries[1].KeyBytes())
 	assert.Equal(t, "pif", entries[1].Val())
 }
 
