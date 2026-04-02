@@ -5,7 +5,12 @@
 - [x] Bucket & Layer indexs first impl
 - [x] Document & Text indexs first impl
 - [x] Time index first impl
-- [_] Implem Bucket service
+- [x] Implem Bucket first service
+- [x] Add Bucket.Layers(version)
+- [x] Add Bucket.Project(version)
+- [x] Keep state of last version loaded in case of successive loading ?
+- [_] Multi device, How ? Use cases ?
+- [_] Temp indexes, How ? Use cases ?
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
 - [x] Implement RotatingHash, who's responsability ?
@@ -17,6 +22,8 @@
 - [_] Encryption of BlocsFiles impl
 - [_] Randomly generated SecretKey ciphered with user passphrase
 - [_] Bucket squashing
+- [_] Bucket hiding : like a delete but data are kept
+- [_] Bucket "history" : show a history of the bucket
 
 
 ## Purpose
@@ -107,30 +114,37 @@ DB to store text documents
 
 ## Implem details
 ### Bucket
-- Ref all layers of a document
+- Ref all layers of a document (lazy loaded)
 - Project a document
 - Can be commited
 - Can be squashed
 - Can be snapshoted
 - ? Where is it stored ? => in an index file
-- Have metadata (uid, name, timings, size, ...)
-- Metadata should be fast readable without reading data (different index ?)
-- Metadata should be decryptable and cached independently of data.
+- Have a Header (uid, name, creation time, labels, ...)
+- Header should be fast readable without reading data (different index ?)
+- Header should be decryptable and cached independently of data.
+- Header must be eagerly loaded
+
+### Header
+- Rarely change (by adding a new Header in index)
+- Ref Bucket name & uid
+- Ref Bucket creation time
+- Ref labels
 
 ### Layer
 - Layer ref a content, a version & a metadata
 - Is written appending into a file
 - Can be marked commited
 - Can be marked snapshoted
+- Ref a Metadata
 
 ### Metadata
 - Ref a version
-- Ref a creation time
 - Ref an update time
-- Ref labels
+- Ref a content size
 
 ### Version
-- Numerical increment ?
+- Numerical increment
 
 ### Index
 - Index --- Paginer --- Page --- BlocsFile
@@ -233,6 +247,7 @@ DB to store text documents
 - If a buckets doublon exists it MUST not be a problem
 - If two concurrent layers exists, attempt to auto merge it
 - If cannot auto merge 2 concurrent layers report conflict to user to merge in a new layer.
+- What to do if 2 buckets with same name => Propose user to merge or to rename.
 
 
 ### Files
@@ -248,3 +263,31 @@ File can writen and rewritten it contains plaintext and must be entirely ciphere
 
 #### Bloc encrypted files
 File contains sequential blocs each ciphered with same key but with different nonce. Each bloc is independant and can be read or updated independently.
+
+
+## Multi device
+- Writing in same name bucket on 2 different devices should be no problem. The user will be prompt to merge the 2 layers if he want it (conflictResolution state on Bucket Header ?)
+- Writing in same bucket on 2 different devices will produce 2 layers of same version attached on 2 different devices. 
+  - MUST Merge layers on bucket opening 
+    - Auto merge or manually merge => produce a new layer of new version
+  - version MUST be a couple (int, device) in case of conflict.
+- In case of no conflict, bucket names, refs, data, may be spread in multiples indexes. Need to parse all indexes. => An indexes wraper to merge all indexes result ?
+
+
+## Squashing / Snapshoting ?
+- Snapshoting is the operation of reducing the amoun of layers needed to project a bucket. It create a new "root layer" and do not introduce changes in it.
+- Squashing is the operation of merging multiple layers (not all) into a new one. It make sense only in case of duplication of layers from tmp index into synced index
+
+
+## Two phases indexing
+- When working for a long time on a device I don't need to sync my work often. So I could delay the creation of Bucket Layers at remote sync operation.
+- My work on a device could be saved in a temp index locally on the device. When I want to remote sync my work, the buckets are then squashed (if I want ?) and pushed in the synced index.
+- We should use the same idx db for tmp idx to have continuous features.
+- Bucket could : 
+  - Save() into "Ephemeral Indexes"
+  - Squash() rewriting "Ephemeral Indexes" ?
+  - Commit() copying into "Rest Index" Erasing Ephemeral Index ?
+- For temp index, do we want to be able to erase index entries ? Hide it ?
+- Temp Index / Ephemeral Index / 
+- Persistent Index / Synced Index / Tomb Index / Rest Index /
+

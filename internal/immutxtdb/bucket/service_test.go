@@ -94,9 +94,11 @@ func TestBucketService_Save(t *testing.T) {
 	assert.Equal(t, FirstLayerVersion, bkt.metadata.Version)
 
 	// Check Root Layer
-	require.NotNil(t, bkt.LayerIt())
+	layerIt, err := bkt.LayerIt(LatestVersion)
+	assert.NoError(t, err)
+	require.NotNil(t, layerIt)
 	k := 0
-	for err, l := range bkt.LayerIt() {
+	for err, l := range layerIt {
 		k++
 		assert.NoError(t, err)
 		assert.NotNil(t, l)
@@ -159,18 +161,23 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	assert.Equal(t, FirstLayerVersion, bkt2.metadata.Version)
 
 	// Check Root Layer
-	require.NotNil(t, bkt2.LayerIt())
+	layerIt1, err := bkt1.LayerIt(LatestVersion)
+	assert.NoError(t, err)
+	require.NotNil(t, layerIt1)
 	var rootLayer1, rootLayer2 *Layer
 	k := 0
-	for err, l := range bkt1.LayerIt() {
+	for err, l := range layerIt1 {
 		k++
 		assert.NoError(t, err)
 		assert.NotNil(t, l)
 		rootLayer1 = l
 	}
 	assert.Equal(t, 1, k)
+	layerIt2, err := bkt2.LayerIt(LatestVersion)
+	assert.NoError(t, err)
+	require.NotNil(t, layerIt2)
 	k = 0
-	for err, l := range bkt2.LayerIt() {
+	for err, l := range layerIt2 {
 		k++
 		assert.NoError(t, err)
 		require.NotNil(t, l)
@@ -178,6 +185,7 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	}
 	assert.Equal(t, 1, k)
 
+	require.NotNil(t, rootLayer2)
 	assert.Equal(t, expectedZipedMsg, rootLayer2.Content)
 	assert.Equal(t, FirstLayerVersion, rootLayer2.Metadata.Version)
 	assert.Equal(t, len(expectedMsg), rootLayer2.Metadata.Size)
@@ -324,10 +332,12 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.Greater(t, after2, *bkt2.metadata.Updated)
 
 	// Check Layers
-	require.NotNil(t, bkt2.LayerIt())
+	layerIt1, err := bkt2.LayerIt(LatestVersion)
+	assert.NoError(t, err)
+	require.NotNil(t, layerIt1)
 	var bkt1Layers, bkt2Layers []*Layer
 	k := 0
-	for err, l := range bkt1.LayerIt() {
+	for err, l := range layerIt1 {
 		assert.NoError(t, err)
 		assert.NotNil(t, l)
 		// if k == 0 {
@@ -341,7 +351,10 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	}
 	assert.Equal(t, 2, k)
 	k = 0
-	for err, l := range bkt2.LayerIt() {
+	layerIt2, err := bkt2.LayerIt(LatestVersion)
+	assert.NoError(t, err)
+	require.NotNil(t, layerIt2)
+	for err, l := range layerIt2 {
 
 		assert.NoError(t, err)
 		require.NotNil(t, l)
@@ -372,6 +385,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.Less(t, before2, *bkt1Layers[1].Metadata.Updated)
 	assert.Greater(t, after2, *bkt1Layers[1].Metadata.Updated)
 
+	require.True(t, len(bkt2Layers) >= 2)
 	// Use ExportedValues comparison because of time.Time comparison not working (some private fields are not the same)
 	assert.EqualExportedValues(t, bkt1Layers[0], bkt2Layers[0])
 	assert.EqualExportedValues(t, bkt1Layers[1], bkt2Layers[1])
@@ -384,7 +398,63 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	text, err = bkt2.ProjectText(LatestVersion)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg2, text)
+}
 
+func TestBucketService_ProjectText(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic("TestBucketService_ProjectText")
+	defer os.RemoveAll(tmpDir)
+
+	expectedDevice := "device"
+	expectedSalt := "salt"
+	expectedName := "foo"
+	expectedMsg1 := ztring.LoremIpsumWords(2)
+	expectedMsg2 := ztring.LoremIpsumWords(4)
+	expectedMsg3 := ztring.LoremIpsumWords(6)
+	expectedMsg4 := ztring.LoremIpsumWords(5)
+
+	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	bkt1 := svc.New(expectedName, nil)
+	assert.NotNil(t, bkt1)
+
+	// First write
+	err = bkt1.WriteText(expectedMsg1)
+	assert.NoError(t, err)
+	err = bkt1.Save()
+	assert.NoError(t, err)
+
+	err = bkt1.WriteText(expectedMsg2)
+	assert.NoError(t, err)
+	err = bkt1.Save()
+	assert.NoError(t, err)
+
+	err = bkt1.WriteText(expectedMsg3)
+	assert.NoError(t, err)
+	err = bkt1.Save()
+	assert.NoError(t, err)
+
+	err = bkt1.WriteText(expectedMsg4)
+	assert.NoError(t, err)
+	err = bkt1.Save()
+	assert.NoError(t, err)
+
+	textLatest, err := bkt1.ProjectText(LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg4, textLatest)
+	text4, err := bkt1.ProjectText(4)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg4, text4)
+	text3, err := bkt1.ProjectText(3)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg3, text3)
+	text2, err := bkt1.ProjectText(2)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg2, text2)
+	text1, err := bkt1.ProjectText(1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg1, text1)
 }
 
 func TestBucketService_Save_Get_Edit_Save_Get(t *testing.T) {

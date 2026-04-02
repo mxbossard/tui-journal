@@ -73,14 +73,14 @@ type Bucket struct {
 	*sync.Mutex
 	service Service
 
-	lastHashedUid HashedBucketUid
-	header        Header
+	// lastHashedUid HashedBucketUid
+	header Header
 	// Last layer Metadata
 	metadata *Metadata
 
-	latestVersion       Version
+	maxLoadedVersion    Version
 	layerIt             iter.Seq2[error, *Layer]
-	loadedBucketEntries map[Version]*idx.Entry[HashedBucketUid, *BucketRef]
+	loadedBucketEntries map[Version]*idx.Entry[BucketUid, *BucketRef]
 	loadedMetadatas     map[Version]*Metadata
 	loadedLayers        map[Version]*Layer
 
@@ -93,7 +93,7 @@ func newBucket(s Service) *Bucket {
 	b := Bucket{
 		Mutex:               &sync.Mutex{},
 		service:             s,
-		loadedBucketEntries: make(map[Version]*idx.Entry[HashedBucketUid, *BucketRef]),
+		loadedBucketEntries: make(map[Version]*idx.Entry[BucketUid, *BucketRef]),
 		loadedMetadatas:     make(map[Version]*Metadata),
 		loadedLayers:        make(map[Version]*Layer),
 	}
@@ -110,8 +110,8 @@ func newNamedBucket(s Service, uid BucketUid, name string) *Bucket {
 	return b
 }
 
-func (b *Bucket) LayerIt() iter.Seq2[error, *Layer] {
-	return b.layerIt
+func (b *Bucket) LayerIt(version Version) (iter.Seq2[error, *Layer], error) {
+	return b.service.buildLayerIt(b, version)
 }
 
 func (b *Bucket) ProjectBinary(version Version) (data []byte, err error) {
@@ -188,7 +188,11 @@ func (b *Bucket) Squash() error {
 func projectText(b *Bucket, version Version) (string, error) {
 	txt := ""
 	k := 1
-	for err, l := range b.LayerIt() {
+	layerIt, err := b.LayerIt(version)
+	if err != nil {
+		return "", err
+	}
+	for err, l := range layerIt {
 		if err != nil {
 			return "", fmt.Errorf("error iterating layer #%d: %w", k, err)
 		}

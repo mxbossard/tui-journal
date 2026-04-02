@@ -47,7 +47,7 @@ var (
 
 type BucketNameIndex idx.Index[string, BucketUid]
 type HeaderRefIndex idx.Index[BucketUid, *HeaderRef]
-type BucketRefIndex idx.Index[HashedBucketUid, *BucketRef]
+type BucketRefIndex idx.Index[BucketUid, *BucketRef]
 
 type Service interface {
 	New(name string, labels Labels) *Bucket
@@ -55,6 +55,7 @@ type Service interface {
 	Get(uid BucketUid) (*Bucket, error)
 	Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
 
+	buildLayerIt(b *Bucket, v Version) (iter.Seq2[error, *Layer], error)
 	save(b *Bucket) error
 	squash(b *Bucket) error
 	commit(b *Bucket) error
@@ -95,7 +96,7 @@ func NewBucketService(dir, device, salt string) (*bucketService, error) {
 	if err != nil {
 		return nil, err
 	}
-	bucketRefIdx, err := newBucketRefIndex(layerIdxDir, device)
+	bucketRefIdx, err := newBucketRefIndex(layerIdxDir, device, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -191,10 +192,11 @@ func (s *bucketService) create(b *Bucket) error {
 	if err != nil {
 		return fmt.Errorf("create: unable to add header ref: %w", err)
 	}
-	hashedUid := HashedBucketUid(hrEntry.KeyBytes())
+	_ = hrEntry
+	// hashedUid := HashedBucketUid(hrEntry.KeyBytes())
 
 	// TODO: 6- Add (HUid, bucketRef) in bucketRef Idx
-	brEntry, err := s.bucketRefIdx.Add(RootLayerState, *b.header.Created, hashedUid, &bucketRef)
+	brEntry, err := s.bucketRefIdx.Add(RootLayerState, *b.header.Created, b.header.Uid, &bucketRef)
 	if err != nil {
 		return fmt.Errorf("create: unable to add bucket ref: %w", err)
 	}
@@ -208,15 +210,11 @@ func (s *bucketService) create(b *Bucket) error {
 
 	b.header.changed = false
 	b.metadata = &metadata
-	b.lastHashedUid = hashedUid
-	b.latestVersion = metadata.Version
+	// b.lastHashedUid = hashedUid
+	b.maxLoadedVersion = metadata.Version
 	b.loadedBucketEntries[metadata.Version] = &brEntry
 	b.loadedMetadatas[metadata.Version] = &metadata
 	b.loadedLayers[metadata.Version] = &l
-	b.layerIt, err = s.buildLayerIt(b)
-	if err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -282,7 +280,7 @@ func (s *bucketService) update(b *Bucket) error {
 		Updated: &now,
 	}
 
-	hashedUid := b.lastHashedUid
+	// hashedUid := b.lastHashedUid
 
 	// TODO: 2- Add (RhUid, headerRef) in headerRef Idx if Header changed
 	if b.header.changed {
@@ -295,7 +293,8 @@ func (s *bucketService) update(b *Bucket) error {
 		if err != nil {
 			return fmt.Errorf("update: unable to add header ref: %w", err)
 		}
-		hashedUid = HashedBucketUid(entry.KeyBytes())
+		_ = entry
+		// hashedUid = HashedBucketUid(entry.KeyBytes())
 		panic("not implemented yet")
 	}
 
@@ -325,7 +324,7 @@ func (s *bucketService) update(b *Bucket) error {
 	}
 
 	// TODO: 4- Add (HUid, bucketRef) in bucketRef Idx
-	brEntry, err := s.bucketRefIdx.Add(layerState, now, hashedUid, &bucketRef)
+	brEntry, err := s.bucketRefIdx.Add(layerState, now, b.header.Uid, &bucketRef)
 	if err != nil {
 		return fmt.Errorf("update: unable to add bucket ref: %w", err)
 	}
@@ -338,7 +337,7 @@ func (s *bucketService) update(b *Bucket) error {
 	}
 
 	// panic("not implemented yet")
-	b.latestVersion = newMetadata.Version
+	b.maxLoadedVersion = newMetadata.Version
 	b.loadedBucketEntries[newMetadata.Version] = &brEntry
 	b.loadedMetadatas[newMetadata.Version] = newMetadata
 	b.loadedLayers[newMetadata.Version] = &l
@@ -359,35 +358,34 @@ func (s *bucketService) save(b *Bucket) error {
 	return s.update(b)
 }
 
-func getLastBucketHeader(paginer idx.Paginer[BucketUid, *HeaderRef]) (*Header, *HashedBucketUid, error) {
+func getLastBucketHeader(paginer idx.Paginer[BucketUid, *HeaderRef]) (*Header, error) {
 	var lastHeader *Header
-	var lastBucketHashedUid HashedBucketUid
 	// FIXME: MUST use all HashedBucketUid !
 	for err, entry := range paginer.All() {
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		lastHeader, err = loadHeader(entry.Val())
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		lastBucketHashedUid = HashedBucketUid(entry.KeyBytes())
 		// Keep only last bucket header found
 		break
 	}
 
 	if lastHeader == nil {
-		return nil, nil, ErrNotExist
+		return nil, ErrNotExist
 	}
 
-	return lastHeader, &lastBucketHashedUid, nil
+	return lastHeader, nil
 }
 
-func (s *bucketService) buildLazyBucket(lastHeader *Header, lastBucketHashedUid *HashedBucketUid) (*Bucket, error) {
+func (s *bucketService) buildLazyBucket(lastHeader *Header) (*Bucket, error) {
 	// 2- List all bucketRefs
 	// FIXME: which uid key ?
 	// FIXME: use state filter to stop on first root state ?
-	bucketPgnr, err := s.bucketRefIdx.Paginate(*lastBucketHashedUid, idx.BottomToTop)
+	fmt.Printf("buildLazyBucket, bUid: %v\n", lastHeader.Uid)
+	bucketPgnr, err := s.bucketRefIdx.HashedPaginate(lastHeader.Uid, idx.BottomToTop)
 	if err != nil {
 		return nil, err
 	}
@@ -408,14 +406,10 @@ func (s *bucketService) buildLazyBucket(lastHeader *Header, lastBucketHashedUid 
 	}
 
 	b := newBucket(s)
-	b.lastHashedUid = *lastBucketHashedUid
+	// b.lastHashedUid = *lastBucketHashedUid
 	b.header = *lastHeader
 	b.metadata = lastMetadata
 	b.saved = true
-	b.layerIt, err = s.buildLayerIt(b)
-	if err != nil {
-		return nil, err
-	}
 	return b, nil
 }
 
@@ -426,12 +420,12 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 		return nil, err
 	}
 
-	lastHeader, lastBucketHashedUid, err := getLastBucketHeader(headerPgnr)
+	lastHeader, err := getLastBucketHeader(headerPgnr)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.buildLazyBucket(lastHeader, lastBucketHashedUid)
+	return s.buildLazyBucket(lastHeader)
 }
 
 func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {
@@ -465,10 +459,10 @@ func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageC
 					break
 				}
 			}
-			lastBucketHashedUid := HashedBucketUid(headerEntry.KeyBytes())
-			b, err := s.buildLazyBucket(lastHeader, &lastBucketHashedUid)
+			// lastBucketHashedUid := HashedBucketUid(headerEntry.KeyBytes())
+			b, err := s.buildLazyBucket(lastHeader)
 			builtBuckets[headerEntry.Key()] = b
-			if !push(idx.NewEntry(headerEntry.Key(), b, headerEntry.Seq(), headerEntry.Time(), headerEntry.State(), err, lastBucketHashedUid[:])) {
+			if !push(idx.NewEntry(headerEntry.Key(), b, headerEntry.Seq(), headerEntry.Time(), headerEntry.State(), err, headerEntry.KeyBytes())) {
 				break
 			}
 		}
@@ -502,13 +496,13 @@ func (s *bucketService) squash(b *Bucket) error {
 	panic("not implemented yet")
 }
 
-func (s *bucketService) buildLayerIt(b *Bucket) (iter.Seq2[error, *Layer], error) {
+func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[error, *Layer], error) {
 	// We want to iterate over last layers only, starting with the last root layer by default.
 	// We may have some layers already loaded in b.loadedLayers.
 	// Need to iterate over all layers metadata
 	// Load content only if necessary
 
-	bucketPgnr, err := s.bucketRefIdx.Paginate(b.lastHashedUid, idx.BottomToTop)
+	bucketPgnr, err := s.bucketRefIdx.HashedPaginate(b.header.Uid, idx.BottomToTop)
 	if err != nil {
 		return nil, err
 	}
@@ -524,13 +518,17 @@ func (s *bucketService) buildLayerIt(b *Bucket) (iter.Seq2[error, *Layer], error
 		}
 		b.loadedBucketEntries[metadata.Version] = &entry
 		b.loadedMetadatas[metadata.Version] = metadata
-		b.latestVersion = max(b.latestVersion, metadata.Version)
+		b.maxLoadedVersion = max(b.maxLoadedVersion, metadata.Version)
+	}
+
+	if version == LatestVersion {
+		version = b.maxLoadedVersion
 	}
 
 	// First implem : for now take all layers
 	firstVersion := FirstLayerVersion
 	return func(yield func(error, *Layer) bool) {
-		for v := firstVersion; v <= b.latestVersion; v++ {
+		for v := firstVersion; v <= version; v++ {
 			var ok bool
 			var l *Layer
 			if l, ok = b.loadedLayers[v]; !ok {
@@ -659,12 +657,12 @@ func newHeaderRefIndex(indexDir, device, salt string) (HeaderRefIndex, error) {
 }
 
 // (KEY: H(BucketUid), VAL: BucketRef)
-func newBucketRefIndex(indexDir, device string) (BucketRefIndex, error) {
+func newBucketRefIndex(indexDir, device, salt string) (BucketRefIndex, error) {
 	enc := idx.NewAsciiEncoder(0, BucketRefIdxStateSize, BucketRefIdxKeySize, BucketRefIdxDataSize)
-	keySer := HashedBucketUidSerializer{}
+	keySer := BucketUidSerializer{}
 	valSer := serialize.StructSerializer[BucketRef]{}
 	return idx.NewBasicIndex(indexDir, BucketRefIdxQualifier, device, keySer, valSer,
-		nil, nil, enc, BucketRefIdxPageSize)
+		idx.NewRotatingHasher([]byte(salt), BucketRefIdxKeySize), nil, enc, BucketRefIdxPageSize)
 }
 
 func generateRandUid() BucketUid {
