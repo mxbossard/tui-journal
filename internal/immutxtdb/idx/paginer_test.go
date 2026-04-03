@@ -38,7 +38,8 @@ func TestPaginer_Pages(t *testing.T) {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
 			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			e := NewEntry(k, msg, k, time.Now(), nil, nil, nil)
+			now := time.Now()
+			e := NewEntry(k, msg, k, now, nil, nil, nil)
 			if !push(e) {
 				// fmt.Printf("breaked!\n")S
 				break
@@ -88,7 +89,8 @@ func TestPaginer_Next(t *testing.T) {
 		for {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
-			e := NewEntry(k, msg, k, time.Now(), []byte("foobarba"), nil, nil)
+			now := time.Now()
+			e := NewEntry(k, msg, k, now, []byte("foobarba"), nil, nil)
 			fmt.Printf("pushing entry: [%s] ...\n", e)
 			if !push(e) {
 				// fmt.Printf("breaked!\n")
@@ -154,7 +156,8 @@ func TestPaginer_Prev(t *testing.T) {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
 			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			e := NewEntry(k, msg, k, time.Now(), nil, nil, nil)
+			now := time.Now()
+			e := NewEntry(k, msg, k, now, nil, nil, nil)
 			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break
@@ -218,7 +221,8 @@ func TestPaginer_All(t *testing.T) {
 		for {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
-			e := NewEntry(k, msg, k, time.Now(), []byte("foobarba"), nil, nil)
+			now := time.Now()
+			e := NewEntry(k, msg, k, now, []byte("foobarba"), nil, nil)
 			fmt.Printf("pushing entry: [%s] ...\n", e)
 			if !push(e) {
 				// fmt.Printf("breaked!\n")
@@ -236,8 +240,8 @@ func TestPaginer_All(t *testing.T) {
 	// assert.Equal(t, expectedPageSize*expectedPreloadCount, k)
 
 	n := 0
-	for err, entry := range p.All() {
-		assert.NoError(t, err)
+	for entry := range p.All() {
+		assert.NoError(t, entry.Error())
 		assert.Equal(t, expectedMessages[n], entry.Val(), "bad entry value")
 		n++
 	}
@@ -246,8 +250,8 @@ func TestPaginer_All(t *testing.T) {
 
 	// 2 consecutive iteration should works
 	n = 0
-	for err, entry := range p.All() {
-		assert.NoError(t, err)
+	for entry := range p.All() {
+		assert.NoError(t, entry.Error())
 		assert.Equal(t, expectedMessages[n], entry.Val(), "bad entry value")
 		n++
 	}
@@ -266,8 +270,8 @@ func TestPaginer_All_Empty(t *testing.T) {
 	require.NotNil(t, p)
 
 	n := 0
-	for err := range p.All() {
-		assert.NoError(t, err)
+	for entry := range p.All() {
+		assert.NotNil(t, entry)
 		n++
 	}
 	assert.Equal(t, expectedCount, n, "bad entry iteration count")
@@ -283,15 +287,16 @@ func TestPaginer_All_OneItem(t *testing.T) {
 	p := NewPaginer(expectedPageSize, expectedPreloadCount, func(push func(Entry[int, string]) bool) {
 		msg := fmt.Sprintf("msg%d", k)
 		expectedMessages = append(expectedMessages, msg)
-		e := NewEntry(k, msg, k, time.Now(), []byte("foobarba"), nil, nil)
+		now := time.Now()
+		e := NewEntry(k, msg, k, now, []byte("foobarba"), nil, nil)
 		fmt.Printf("pushing entry: [%s] ...\n", e)
 		push(e)
 	})
 	require.NotNil(t, p)
 
 	n := 0
-	for err := range p.All() {
-		assert.NoError(t, err)
+	for entry := range p.All() {
+		assert.NotNil(t, entry)
 		n++
 	}
 	assert.Len(t, expectedMessages, expectedCount, "bad produced msg count")
@@ -314,7 +319,8 @@ func TestPaginer_WithErrors(t *testing.T) {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
 			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			e := NewEntry(k, msg, k, time.Now(), nil, err, nil)
+			now := time.Now()
+			e := NewEntry(k, msg, k, now, nil, err, nil)
 			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break
@@ -355,7 +361,8 @@ func TestPaginer_Preloading(t *testing.T) {
 			msg := fmt.Sprintf("msg%d", k)
 			expectedMessages = append(expectedMessages, msg)
 			// fmt.Printf("pushing msg: [%s] ...\n", msg)
-			e := NewEntry(k, msg, k, time.Now(), nil, nil, nil)
+			now := time.Now()
+			e := NewEntry(k, msg, k, now, nil, nil, nil)
 			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break

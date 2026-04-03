@@ -39,8 +39,10 @@ type KeyRotatingHasher[K comparable] func(int, K) (K, error)
 type Index[K comparable, V any] interface {
 	// Add a KV entry
 	Add(s State, t time.Time, key K, val V) (Entry[K, V], error)
-	// Return KV entries count
-	Count() (int, error)
+	// Return last entry seq
+	LastSeq() (int, error)
+
+	// ----- Browsing Methods -----
 	// Paginate all KV entries matching supplied key & Filter
 	Filter(key K, order Order, f Filter) (Paginer[K, V], error)
 	// Paginate all KV entries matching supplied key & Filter
@@ -54,7 +56,7 @@ type Index[K comparable, V any] interface {
 	// Paginate all KV entries
 	PaginateAll(order Order) (Paginer[K, V], error)
 	// Return an iterator of all KV entries
-	All(order Order) (iter.Seq2[error, Entry[K, V]], error)
+	All(order Order) (iter.Seq[Entry[K, V]], error)
 }
 
 type basicIndex[K comparable, V any] struct {
@@ -62,16 +64,17 @@ type basicIndex[K comparable, V any] struct {
 	*sync.Mutex
 	// FIXME: add a filelock
 
-	keySerializer  serialize.Serializer[K]
-	valSerializer  serialize.Serializer[V]
-	keyHasher      RotatingHasher
-	valHasher      RotatingHasher
-	encoder        IdxEncoder // FIXME: encoder must be attached to each BlocsFile or to each Bloc !
-	pageSize       int
-	filepathes     []string
-	deviceIdxFiles []*filez.BlocsFile
-	otherIdxFiles  []*filez.BlocsFile
-	seqs           map[string]int
+	keySerializer    serialize.Serializer[K]
+	valSerializer    serialize.Serializer[V]
+	keyHasher        RotatingHasher
+	valHasher        RotatingHasher
+	encoder          IdxEncoder // FIXME: encoder must be attached to each BlocsFile or to each Bloc !
+	pageSize         int
+	preloadPageCount int
+	filepathes       []string
+	deviceIdxFiles   []*filez.BlocsFile
+	otherIdxFiles    []*filez.BlocsFile
+	seqs             map[string]int
 }
 
 func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, keySer serialize.Serializer[K], valSer serialize.Serializer[V], keyH, valH RotatingHasher, enc IdxEncoder, pageSize int) (*basicIndex[K, V], error) {
@@ -191,7 +194,7 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 	return NewEntry(k, v, seq, truncatedTime, normalizedState, nil, key), nil
 }
 
-func (i *basicIndex[K, V]) Count() (int, error) {
+func (i *basicIndex[K, V]) LastSeq() (int, error) {
 	// Should be performent and not read all the index to count lines.
 	i.Lock()
 	defer i.Unlock()
@@ -221,7 +224,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 	}
 
 	idxFiles := append(i.deviceIdxFiles, i.otherIdxFiles...)
-	p := NewPaginer(i.pageSize, 0, func(push func(Entry[K, V]) bool) {
+	p := NewPaginer(i.pageSize, i.preloadPageCount, func(push func(Entry[K, V]) bool) {
 		// pusher func impl
 
 	End:
@@ -350,7 +353,7 @@ func (i *basicIndex[K, V]) PaginateAll(order Order) (Paginer[K, V], error) {
 	return i.filter(noKey, false, false, order, nil)
 }
 
-func (i *basicIndex[K, V]) All(order Order) (iter.Seq2[error, Entry[K, V]], error) {
+func (i *basicIndex[K, V]) All(order Order) (iter.Seq[Entry[K, V]], error) {
 	paginer, err := i.PaginateAll(order)
 	if err != nil {
 		return nil, err

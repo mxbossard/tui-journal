@@ -85,7 +85,7 @@ type HashedBucketUid [128]byte
 type Bucket struct {
 	Uid        BucketUid
 	Metadata   BucketMetadata
-	LayerRefIt iter.Seq2[error, idx.Entry[*HashedBucketUid, *LayerRef]]
+	LayerRefIt iter.Seq[idx.Entry[*HashedBucketUid, *LayerRef]]
 	//layers     []*Layer
 }
 

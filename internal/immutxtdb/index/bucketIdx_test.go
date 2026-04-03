@@ -35,14 +35,14 @@ func TestBucketIndex_Count(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	count, err := bIdx.Count()
+	count, err := bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
 	_, err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 
-	count, err = bIdx.Count()
+	count, err = bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -51,14 +51,14 @@ func TestBucketIndex_Count(t *testing.T) {
 	_, err = bIdx.Add(Document, expectedTime, nil, "baz")
 	assert.NoError(t, err)
 
-	count, err = bIdx.Count()
+	count, err = bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
 	_, err = bIdx.Add(Document, expectedTime, nil, "foo")
 	assert.NoError(t, err)
 
-	count, err = bIdx.Count()
+	count, err = bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 4, count)
 }

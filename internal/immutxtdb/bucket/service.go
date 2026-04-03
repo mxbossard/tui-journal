@@ -361,10 +361,11 @@ func (s *bucketService) save(b *Bucket) error {
 func getLastBucketHeader(paginer idx.Paginer[BucketUid, *HeaderRef]) (*Header, error) {
 	var lastHeader *Header
 	// FIXME: MUST use all HashedBucketUid !
-	for err, entry := range paginer.All() {
-		if err != nil {
-			return nil, err
+	for entry := range paginer.All() {
+		if entry.Error() != nil {
+			return nil, entry.Error()
 		}
+		var err error
 		lastHeader, err = loadHeader(entry.Val())
 		if err != nil {
 			return nil, err
@@ -394,7 +395,10 @@ func (s *bucketService) buildLazyBucket(lastHeader *Header) (*Bucket, error) {
 	// Use all layers until first root layer
 	var lastMetadata *Metadata
 
-	for _, entry := range bucketPgnr.All() {
+	for entry := range bucketPgnr.All() {
+		if entry.Error() != nil {
+			return nil, entry.Error()
+		}
 		metadata, err := loadMetadata(&entry.Val().MetadataRef)
 		if err != nil {
 			return nil, err
@@ -442,7 +446,12 @@ func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageC
 	builtBuckets := make(map[BucketUid]*Bucket)
 	// 2- Return an iterator building a bucket for each header
 	return idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
-		for err, headerEntry := range headerPgnr.All() {
+		for headerEntry := range headerPgnr.All() {
+			if headerEntry.Error() != nil {
+				if !push(idx.NewErrEntry[BucketUid, *Bucket](err)) {
+					break
+				}
+			}
 			if _, ok := builtBuckets[headerEntry.Key()]; ok {
 				// Bucket already built and pushed
 				continue
@@ -477,9 +486,9 @@ func (s *bucketService) Names() (map[string]BucketUid, error) {
 
 	nameByUidMap := make(map[BucketUid]string)
 	lastUidByNameMap := make(map[string]BucketUid)
-	for err, entry := range nameIt {
-		if err != nil {
-			return nil, err
+	for entry := range nameIt {
+		if entry.Error() != nil {
+			return nil, entry.Error()
 		}
 		nameByUidMap[BucketUid(entry.Val())] = entry.Key()
 		lastUidByNameMap[entry.Key()] = entry.Val()
@@ -508,9 +517,9 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 	}
 
 	// Eagerly load all Layer metadatas
-	for err, entry := range bucketPgnr.All() {
-		if err != nil {
-			return nil, fmt.Errorf("error iterating bucketRefIdx: %w", err)
+	for entry := range bucketPgnr.All() {
+		if entry.Error() != nil {
+			return nil, fmt.Errorf("error iterating bucketRefIdx: %w", entry.Error())
 		}
 		metadata, err := loadMetadata(&entry.Val().MetadataRef)
 		if err != nil {

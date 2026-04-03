@@ -205,9 +205,9 @@ func readLayerDiff(ref *model.LayerRef) (string, error) {
 
 func project(b *model.Bucket) (txt string, err error) {
 	// FIXME: implements diff aggregation
-	for err2, entry := range b.LayerRefIt {
-		if err2 != nil {
-			return "", err2
+	for entry := range b.LayerRefIt {
+		if entry.Error() != nil {
+			return "", entry.Error()
 		}
 		txt, err = readLayerDiff(entry.Val())
 		if err != nil && err != io.EOF {
@@ -286,9 +286,9 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 	// }
 
 	// 6- Forge the root layer iterator
-	var layerRefIt iter.Seq2[error, idx.Entry[*model.HashedBucketUid, *model.LayerRef]] = func(yield func(error, idx.Entry[*model.HashedBucketUid, *model.LayerRef]) bool) {
+	var layerRefIt iter.Seq[idx.Entry[*model.HashedBucketUid, *model.LayerRef]] = func(yield func(idx.Entry[*model.HashedBucketUid, *model.LayerRef]) bool) {
 		entry := idx.NewEntry(&hUid, rootLayerRef, -1, now, dumpRootLayerState, nil, e.KeyBytes())
-		yield(nil, entry)
+		yield(entry)
 	}
 
 	// 7- Build the entity to return

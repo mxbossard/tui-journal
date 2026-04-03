@@ -49,8 +49,8 @@ func TestBasicIndex_Add(t *testing.T) {
 	assert.Equal(t, nil, entry.Error())
 }
 
-func TestBasicIndex_Count(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Count")
+func TestBasicIndex_LastSeq(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_LastSeq")
 	defer os.RemoveAll(tmpDir)
 
 	expectedPageSize := 10
@@ -64,14 +64,14 @@ func TestBasicIndex_Count(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	count, err := bIdx.Count()
+	count, err := bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
 	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
 	assert.NoError(t, err)
 
-	count, err = bIdx.Count()
+	count, err = bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -80,20 +80,20 @@ func TestBasicIndex_Count(t *testing.T) {
 	_, err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
 
-	count, err = bIdx.Count()
+	count, err = bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
 	_, err = bIdx.Add(expectedState, expectedTime, "k1", "pif")
 	assert.NoError(t, err)
 
-	count, err = bIdx.Count()
+	count, err = bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 4, count)
 }
 
-func TestBasicIndex_CountReopen(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_CountReopen")
+func TestBasicIndex_LastSeqReopen(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_LastSeqReopen")
 	defer os.RemoveAll(tmpDir)
 
 	expectedPageSize := 10
@@ -107,7 +107,7 @@ func TestBasicIndex_CountReopen(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	count, err := bIdx.Count()
+	count, err := bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count)
 
@@ -118,7 +118,7 @@ func TestBasicIndex_CountReopen(t *testing.T) {
 	_, err = bIdx.Add(expectedState, expectedTime, "k3", "baz")
 	assert.NoError(t, err)
 
-	count, err = bIdx.Count()
+	count, err = bIdx.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
@@ -127,7 +127,7 @@ func TestBasicIndex_CountReopen(t *testing.T) {
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
-	count, err = bIdx2.Count()
+	count, err = bIdx2.LastSeq()
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 }

@@ -9,6 +9,9 @@
 - [x] Add Bucket.Layers(version)
 - [x] Add Bucket.Project(version)
 - [x] Keep state of last version loaded in case of successive loading ?
+- [_] Add Service.Snapshot()
+- [_] Idx Concatenation
+- [_] Idx Entry Hiding
 - [_] Multi device, How ? Use cases ?
 - [_] Temp indexes, How ? Use cases ?
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
@@ -265,8 +268,61 @@ File can writen and rewritten it contains plaintext and must be entirely ciphere
 File contains sequential blocs each ciphered with same key but with different nonce. Each bloc is independant and can be read or updated independently.
 
 
+## Idx "same key entries"
+Idx is a (Key, Value) store which can store multiple values with the same key.
+We refer to it as "same key entries".
+Each entry may have a different state, it's up to the user to give each entry a state.
+How to count same key entries ?
+
+
+## Idx stats ?
+MAY store internal stats entries in the index to not have to scan all the index to build stats.
+=> Are Index stats needed ?
+- AllCount() return all entries count (ignoring internal entries like stats)
+- Count() return not hidden entries count
+- HiddenCount() return hidden entries count
+- DistinctCount() ? return distinct keys count
+- DistinctHiddenCount() ? return distinct keys count
+Implem ideas:
+- Store a stats entry to avoid full scan.
+- It SHOULD be simple to count all entries, hidden entries and not hidden entries.
+- But to count Distinct entries, we need to check all previous keys
+- We could store all distinct keys in a dedicated file which can be quickly read.
+- We could associate 
+
+## Index Entry Removal / Disabling / Hiding
+- Removed entries are hidden by default but can be optionaly read.
+- ? Do we support "entry removal" OR "key removal" ?
+- COULD add a "special" entry with a "0 state".
+- COULD add a "special" entry with a "0 time".
+- COULD add a "special" entry with a "0 value" ?
+- What to do with "same key entries" that share a same key (like Bucket Headers, Bucket Layers, ...) Do we need to delete all the entries ?
+- Hidden entries MUST be filtered by default and COULD be browsed in option using StateFilter ?
+- Hide(key K) error ? OR Hide(t time.Time, key K) error ?
+- PROBLEM: how to count ? with hidden entries ?
+
+
+## Index concatenation
+- A wrapper around multiple indexes of same type to :
+  - Browse them concurrently 
+  - Ordering by time ?
+  - Add in them ? Add(qualifier)
+  - Hide in all of them
+
+
+## Index copy ?
+
+
+## Index squashing / compacting ?
+
+
+## Bucket Service
+- Merge On Read ? Append only ?
+- Immutable data / 
+
+
 ## Multi device
-- Writing in same name bucket on 2 different devices should be no problem. The user will be prompt to merge the 2 layers if he want it (conflictResolution state on Bucket Header ?)
+- Writing in same name bucket on 2 different devices should be no problem. The user will be prompted to merge the 2 layers if he want it (conflictResolution state in Bucket Header ?, Hide the not merged bucket ?)
 - Writing in same bucket on 2 different devices will produce 2 layers of same version attached on 2 different devices. 
   - MUST Merge layers on bucket opening 
     - Auto merge or manually merge => produce a new layer of new version
@@ -274,12 +330,12 @@ File contains sequential blocs each ciphered with same key but with different no
 - In case of no conflict, bucket names, refs, data, may be spread in multiples indexes. Need to parse all indexes. => An indexes wraper to merge all indexes result ?
 
 
-## Squashing / Snapshoting ?
-- Snapshoting is the operation of reducing the amoun of layers needed to project a bucket. It create a new "root layer" and do not introduce changes in it.
-- Squashing is the operation of merging multiple layers (not all) into a new one. It make sense only in case of duplication of layers from tmp index into synced index
+## Snapshoting
+- Snapshoting is the operation of reducing the amount of layers needed to project a bucket. It create a new "root layer" and do not introduce changes in it.
+- Same Responsibility than Save().
 
 
-## Two phases indexing
+## Two phases indexing (EphemeralService with Squash & Commit)
 - When working for a long time on a device I don't need to sync my work often. So I could delay the creation of Bucket Layers at remote sync operation.
 - My work on a device could be saved in a temp index locally on the device. When I want to remote sync my work, the buckets are then squashed (if I want ?) and pushed in the synced index.
 - We should use the same idx db for tmp idx to have continuous features.
@@ -287,7 +343,16 @@ File contains sequential blocs each ciphered with same key but with different no
   - Save() into "Ephemeral Indexes"
   - Squash() rewriting "Ephemeral Indexes" ?
   - Commit() copying into "Rest Index" Erasing Ephemeral Index ?
+  - OR Commit(squash bool) => BETTER squash only on commit (Simpler)
+- Squashing is the operation of merging multiple layers (not all) into a new one. It make sense only in case of duplication of layers from tmp index into synced index.
 - For temp index, do we want to be able to erase index entries ? Hide it ?
 - Temp Index / Ephemeral Index / 
-- Persistent Index / Synced Index / Tomb Index / Rest Index /
+- Persistent Index / Synced Index / Tomb Index / Rest Index
+- Do we want 1 or 2 different Bucket services ?
+  - For simplicity we SHOULD have 2 identical services using 2 different indexes.
+    - Index item copy may be implemented à index level ? (Find ephemeral => Add rested)
+    - Squashing MUST return Ephemeral Bucket data ingestable in Rested Bucket Service. COULD be implemented at service level which is responsability
+    - Commiting is needed only for Ephemeral Bucket ? => Service responsability ?
+    - SHOULD decorelate Bucket and Service to be able to pass a Bucket from EphemeralService to RestedService.
+    
 

@@ -539,7 +539,7 @@ func TestBucketService_Filter(t *testing.T) {
 	require.NotNil(t, pgnr)
 
 	k := 0
-	for _, b := range pgnr.All() {
+	for b := range pgnr.All() {
 		switch k {
 		case 0:
 			assert.Equal(t, expectedName2, b.Val().header.Name)

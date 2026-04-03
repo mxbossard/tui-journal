@@ -54,7 +54,7 @@ type Paginer[K comparable, V any] interface {
 	Prev() (*page[K, V], bool, error)
 	Next() (*page[K, V], bool, error)
 	Pages() iter.Seq2[error, *page[K, V]]
-	All() iter.Seq2[error, Entry[K, V]]
+	All() iter.Seq[Entry[K, V]]
 }
 
 type paginer[K comparable, V any] struct {
@@ -161,13 +161,13 @@ func (p *paginer[K, V]) Pages() iter.Seq2[error, *page[K, V]] {
 	}
 }
 
-func (p *paginer[K, V]) All() iter.Seq2[error, Entry[K, V]] {
-	return func(yield func(error, Entry[K, V]) bool) {
+func (p *paginer[K, V]) All() iter.Seq[Entry[K, V]] {
+	return func(yield func(Entry[K, V]) bool) {
 		p.Reset()
 		for {
 			page, ok, err := p.Next()
 			if err != nil {
-				if !yield(err, NewErrEntry[K, V](err)) {
+				if !yield(NewErrEntry[K, V](err)) {
 					return
 				}
 				// Stop page iteration on error
@@ -175,7 +175,7 @@ func (p *paginer[K, V]) All() iter.Seq2[error, Entry[K, V]] {
 			}
 			for _, entry := range page.All() {
 				// fmt.Printf("supplying entry %s in pagine %d ...\n", entry, page.number)
-				if !yield(nil, entry) {
+				if !yield(entry) {
 					return
 				}
 			}
