@@ -18,11 +18,21 @@ type BasicIndexCat[K comparable, V any] struct {
 	rwIndexes        map[string]Index[K, V]
 }
 
+func NewCat[K comparable, V any](pageSize, preloadPageCount int,
+	roIndexes map[string]Index[K, V], rwIndexes map[string]Index[K, V]) *BasicIndexCat[K, V] {
+	return &BasicIndexCat[K, V]{
+		pageSize:         pageSize,
+		preloadPageCount: preloadPageCount,
+		roIndexes:        roIndexes,
+		rwIndexes:        rwIndexes,
+	}
+}
+
 // Add a KV entry
-func (c BasicIndexCat[K, V]) Add(qualifier string, s State, t time.Time, key K, val V) (Entry[K, V], error) {
-	idx, ok := c.rwIndexes[qualifier]
+func (c BasicIndexCat[K, V]) Add(partition string, s State, t time.Time, key K, val V) (Entry[K, V], error) {
+	idx, ok := c.rwIndexes[partition]
 	if !ok {
-		return nil, fmt.Errorf("index qualifier: %s not referenced", qualifier)
+		return nil, fmt.Errorf("index partition: %s not referenced", partition)
 	}
 	return idx.Add(s, t, key, val)
 }
@@ -32,45 +42,94 @@ func (c BasicIndexCat[K, V]) Add(qualifier string, s State, t time.Time, key K, 
 
 // }
 
-// ----- Browsing Methods -----
-// Paginate all KV entries matching supplied key & Filter
-func (c BasicIndexCat[K, V]) Filter(key K, order Order, f Filter) (Paginer[K, V], error) {
-	paginers := make(map[string]Paginer[K, V])
-	m := &sync.Mutex{}
-	errs := make(chan error)
-	wg := sync.WaitGroup{}
-	for q, idx := range c.rwIndexes {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			p, err := idx.Filter(key, order, f)
-			if err != nil {
-				errs <- err
-			} else {
-				m.Lock()
-				paginers[q] = p
-				m.Unlock()
-			}
-		}()
-	}
-	for q, idx := range c.roIndexes {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			p, err := idx.Filter(key, order, f)
-			if err != nil {
-				errs <- err
-			} else {
-				m.Lock()
-				paginers[q] = p
-				m.Unlock()
-			}
-		}()
-	}
-	wg.Wait()
+// call supplied f paginer function on all concatenated indexes
+func (c BasicIndexCat[K, V]) concat(order Order, f func(i Index[K, V]) (Paginer[K, V], error)) (Paginer[K, V], error) {
+	stop := false
+	chansVal := make(map[string]chan Entry[K, V])
+	chans := &chansVal
+	nextEntriesVal := make(map[string]Entry[K, V])
+	nextEntries := &nextEntriesVal
+	mutex := &sync.Mutex{}
 
-	if agg := errorz.ChanCollect(errs); agg.Got() {
-		return nil, agg
+	init := func() error {
+		stop = false
+		m := &sync.Mutex{}
+		errs := make(chan error)
+		wg := sync.WaitGroup{}
+		paginers := make(map[string]Paginer[K, V])
+
+		for q, idx := range c.rwIndexes {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				p, err := f(idx)
+				if err != nil {
+					errs <- err
+				} else {
+					m.Lock()
+					paginers[q] = p
+					m.Unlock()
+				}
+			}()
+		}
+		for q, idx := range c.roIndexes {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				p, err := f(idx)
+				if err != nil {
+					errs <- err
+				} else {
+					m.Lock()
+					paginers[q] = p
+					m.Unlock()
+				}
+			}()
+		}
+		wg.Wait()
+
+		if agg := errorz.ChanCollect(errs); agg.Got() {
+			return agg
+		}
+
+		// Launch goroutines to stream entries
+		for q, p := range paginers {
+			// Make a buffered chan of size 1
+			c := make(chan Entry[K, V], 1)
+			mutex.Lock()
+			(*chans)[q] = c
+			mutex.Unlock()
+			go func() {
+				// Continuously push next entries
+				defer close(c)
+				for entry := range p.All() {
+					c <- entry
+					if stop {
+						break
+					}
+				}
+			}()
+		}
+
+		// Init nextEntries
+		for q, c := range *chans {
+			e, ok := <-c
+			if ok {
+				(*nextEntries)[q] = e
+			} else {
+				mutex.Lock()
+				delete(*chans, q)
+				mutex.Unlock()
+			}
+		}
+
+		fmt.Printf("cat paginer initialized chans: %d\n", len(*chans))
+		return nil
+	}
+
+	err := init()
+	if err != nil {
+		return nil, err
 	}
 
 	// TODO implements paginers browsing into a new one order by time
@@ -78,115 +137,120 @@ func (c BasicIndexCat[K, V]) Filter(key K, order Order, f Filter) (Paginer[K, V]
 	// Consume one element from each chan
 	// Keep elements pushing the one with the good order
 
-	stop := false
-	chans := make(map[string]chan Entry[K, V])
-	for q, p := range paginers {
-		// Make a buffered chan of size 1
-		c := make(chan Entry[K, V], 1)
-		chans[q] = c
-		go func() {
-			defer close(c)
-			for entry := range p.All() {
-				chans[q] <- entry
-				if stop {
-					break
-				}
-			}
-		}()
-	}
-
 	paginer := NewPaginer(c.pageSize, c.preloadPageCount, func(push func(e Entry[K, V]) bool) {
-		nextEntries := make(map[string]Entry[K, V])
-		// Init nextEntries
-		for q, c := range chans {
-			e, ok := <-c
-			if ok {
-				nextEntries[q] = e
-			} else {
-				delete(chans, q)
-			}
-		}
-
-		qualifiers := collectionz.Keys(nextEntries)
+		// TODO updates idx if needed
+		defer func() {
+			stop = true
+		}()
+		fmt.Printf("paginer chans: %d\n", len(*chans))
+		partitions := collectionz.Keys(*nextEntries)
 	End:
-		for len(qualifiers) > 0 {
+		for len(partitions) > 0 {
 			var refTime *time.Time
-			selectedQualifier := ""
-			sort.Strings(qualifiers)
-			for _, q := range qualifiers {
-				e, ok := nextEntries[q]
+			selectedPartition := ""
+			sort.Strings(partitions)
+			for _, q := range partitions {
+				e, ok := (*nextEntries)[q]
 				if !ok {
 					// no more entries in chan
-					delete(nextEntries, q)
-					selectedQualifier = ""
+					delete(*nextEntries, q)
+					selectedPartition = ""
 				}
-				// Select next entry to push qualifier (by time)
+				// Select next entry to push partition (by time)
 				switch order {
 				case TopToBottom:
 					if refTime == nil || refTime.After(e.Time()) {
 						t := e.Time()
 						refTime = &t
-						selectedQualifier = q
+						selectedPartition = q
 					}
 				case BottomToTop:
 					if refTime == nil || refTime.Before(e.Time()) {
 						t := e.Time()
 						refTime = &t
-						selectedQualifier = q
+						selectedPartition = q
 					}
 				default:
 					panic(fmt.Sprintf("no supported order: %s", order))
 				}
 			}
 
-			if nextEntry, ok := nextEntries[selectedQualifier]; ok {
+			if nextEntry, ok := (*nextEntries)[selectedPartition]; ok {
 				if !push(nextEntry) {
 					break End
 				}
-				delete(nextEntries, selectedQualifier)
+				delete(*nextEntries, selectedPartition)
 			}
 
-			if c, ok := chans[selectedQualifier]; ok {
+			mutex.Lock()
+			c, ok := (*chans)[selectedPartition]
+			mutex.Unlock()
+			if ok {
 				e, ok := <-c
 				if ok {
-					nextEntries[selectedQualifier] = e
+					(*nextEntries)[selectedPartition] = e
 				} else {
-					delete(chans, selectedQualifier)
+					mutex.Lock()
+					delete(*chans, selectedPartition)
+					mutex.Unlock()
 				}
 			}
-			qualifiers = collectionz.Keys(nextEntries)
+
+			partitions = collectionz.Keys(*nextEntries)
 		}
 	})
 
-	return paginer, nil
+	return paginer, err
+}
+
+// ----- Browsing Methods -----
+// Paginate all KV entries matching supplied key & Filter
+func (c BasicIndexCat[K, V]) Filter(key K, order Order, f Filter) (Paginer[K, V], error) {
+	return c.concat(order, func(i Index[K, V]) (Paginer[K, V], error) {
+		return i.Filter(key, order, f)
+	})
 }
 
 // Paginate all KV entries matching supplied key & Filter
 func (c BasicIndexCat[K, V]) HashedFilter(key K, order Order, f Filter) (Paginer[K, V], error) {
-	panic("not implemented yet")
+	return c.concat(order, func(i Index[K, V]) (Paginer[K, V], error) {
+		return i.HashedFilter(key, order, f)
+	})
 }
 
 // Paginate all KV entries matching supplied Filter
 func (c BasicIndexCat[K, V]) FilterAll(order Order, f Filter) (Paginer[K, V], error) {
-	panic("not implemented yet")
+	return c.concat(order, func(i Index[K, V]) (Paginer[K, V], error) {
+		return i.FilterAll(order, f)
+	})
 }
 
 // Paginate all KV entries exactly matching supplied key
 func (c BasicIndexCat[K, V]) Paginate(key K, order Order) (Paginer[K, V], error) {
-	panic("not implemented yet")
+	return c.concat(order, func(i Index[K, V]) (Paginer[K, V], error) {
+		return i.Paginate(key, order)
+	})
 }
 
 // Paginate all KV entries matching supplied key which will be rotating hashed
 func (c BasicIndexCat[K, V]) HashedPaginate(key K, order Order) (Paginer[K, V], error) {
-	panic("not implemented yet")
+	return c.concat(order, func(i Index[K, V]) (Paginer[K, V], error) {
+		return i.HashedPaginate(key, order)
+	})
 }
 
 // Paginate all KV entries
 func (c BasicIndexCat[K, V]) PaginateAll(order Order) (Paginer[K, V], error) {
-	panic("not implemented yet")
+	return c.concat(order, func(i Index[K, V]) (Paginer[K, V], error) {
+		return i.PaginateAll(order)
+	})
 }
 
 // Return an iterator of all KV entries
-func (c BasicIndexCat[K, V]) All(order Order) (iter.Seq2[error, Entry[K, V]], error) {
-	panic("not implemented yet")
+func (c BasicIndexCat[K, V]) All(order Order) (iter.Seq[Entry[K, V]], error) {
+	paginer, err := c.PaginateAll(order)
+	if err != nil {
+		return nil, err
+	}
+	return paginer.All(), nil
 }

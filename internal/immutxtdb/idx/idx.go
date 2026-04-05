@@ -64,6 +64,7 @@ type basicIndex[K comparable, V any] struct {
 	*sync.Mutex
 	// FIXME: add a filelock
 
+	name, partition  string
 	keySerializer    serialize.Serializer[K]
 	valSerializer    serialize.Serializer[V]
 	keyHasher        RotatingHasher
@@ -77,27 +78,36 @@ type basicIndex[K comparable, V any] struct {
 	seqs             map[string]int
 }
 
-func NewBasicIndex[K comparable, V any](indexDir, qualifier, device string, keySer serialize.Serializer[K], valSer serialize.Serializer[V], keyH, valH RotatingHasher, enc IdxEncoder, pageSize int) (*basicIndex[K, V], error) {
+// Create a Basic Index.
+// Name should be a functionnal name
+// Partition should be a technical qualifier (like a device)
+func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
+	keySer serialize.Serializer[K], valSer serialize.Serializer[V],
+	keyH, valH RotatingHasher, enc IdxEncoder,
+	pageSize, preloadPageCount int) (*basicIndex[K, V], error) {
 	// Init bucketIndex
 	// FIXME: manage multiple idx files (rotation)
 	// FIXME: add a filelock
 	// FIXME: addRotatingHash ?
-	firstDeviceFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", qualifier, device))
+	firstDeviceFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", name, partition))
 	dbf1, err := filez.NewBlocsFile(firstDeviceFilepath, 256, 100)
 	if err != nil {
 		return nil, fmt.Errorf("unable to build blocs file: %w", err)
 	}
 	idx := &basicIndex[K, V]{
-		Mutex:          &sync.Mutex{},
-		keySerializer:  keySer,
-		valSerializer:  valSer,
-		keyHasher:      keyH,
-		valHasher:      valH,
-		encoder:        enc,
-		pageSize:       pageSize,
-		deviceIdxFiles: []*filez.BlocsFile{dbf1},
-		otherIdxFiles:  nil,
-		seqs:           make(map[string]int),
+		Mutex:            &sync.Mutex{},
+		name:             name,
+		partition:        partition,
+		keySerializer:    keySer,
+		valSerializer:    valSer,
+		keyHasher:        keyH,
+		valHasher:        valH,
+		encoder:          enc,
+		pageSize:         pageSize,
+		preloadPageCount: preloadPageCount,
+		deviceIdxFiles:   []*filez.BlocsFile{dbf1},
+		otherIdxFiles:    nil,
+		seqs:             make(map[string]int),
 	}
 
 	// FIXME: need to setup the encoder!

@@ -653,7 +653,7 @@ func newBucketNameIndex(indexDir, device string) (BucketNameIndex, error) {
 	keySer := serialize.AsciiSerializer{}
 	valSer := BucketUidSerializer{}
 	return idx.NewBasicIndex(indexDir, BucketNameIdxQualifier, device, keySer, valSer,
-		nil, nil, enc, BucketNameIdxPageSize)
+		nil, nil, enc, BucketNameIdxPageSize, 0)
 }
 
 // (KEY: RH(BucketUid), VAL: HeaderRef)
@@ -662,7 +662,7 @@ func newHeaderRefIndex(indexDir, device, salt string) (HeaderRefIndex, error) {
 	keySer := BucketUidSerializer{}
 	valSer := serialize.StructSerializer[HeaderRef]{}
 	return idx.NewBasicIndex(indexDir, HeaderRefIdxQualifier, device, keySer, valSer,
-		idx.NewRotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize)
+		idx.NewRotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize, 0)
 }
 
 // (KEY: H(BucketUid), VAL: BucketRef)
@@ -671,7 +671,7 @@ func newBucketRefIndex(indexDir, device, salt string) (BucketRefIndex, error) {
 	keySer := BucketUidSerializer{}
 	valSer := serialize.StructSerializer[BucketRef]{}
 	return idx.NewBasicIndex(indexDir, BucketRefIdxQualifier, device, keySer, valSer,
-		idx.NewRotatingHasher([]byte(salt), BucketRefIdxKeySize), nil, enc, BucketRefIdxPageSize)
+		idx.NewRotatingHasher([]byte(salt), BucketRefIdxKeySize), nil, enc, BucketRefIdxPageSize, 0)
 }
 
 func generateRandUid() BucketUid {
