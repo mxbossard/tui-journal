@@ -10,8 +10,7 @@
 - [x] Add Bucket.Project(version)
 - [x] Keep state of last version loaded in case of successive loading ?
 - [_] Add Service.Snapshot()
-- [_] Idx Concatenation
-- [_] Idx Entry Hiding
+- [x] Idx Concatenation
 - [_] Multi device, How ? Use cases ?
 - [_] Temp indexes, How ? Use cases ?
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
@@ -27,6 +26,7 @@
 - [_] Bucket squashing
 - [_] Bucket hiding : like a delete but data are kept
 - [_] Bucket "history" : show a history of the bucket
+- [_] Idx Entry Hiding
 
 
 ## Purpose
@@ -313,7 +313,7 @@ Implem ideas:
 ## Index copy ?
 
 
-## Index squashing / compacting ?
+## Index compaction ?
 
 
 ## Bucket Service
