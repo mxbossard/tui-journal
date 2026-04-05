@@ -2,7 +2,6 @@ package idx
 
 import (
 	"errors"
-	"fmt"
 	"iter"
 )
 
@@ -65,10 +64,9 @@ type paginer[K comparable, V any] struct {
 	preloadCount int
 	loaded       []*page[K, V]
 	current      int
-	pushed       *chan Entry[K, V]
+	pushed       chan Entry[K, V]
 	closed       bool
 	endReached   bool
-	reinit       func() error
 }
 
 // Build a page, attempt to complete it all (load page size items)
@@ -79,8 +77,8 @@ func (p *paginer[K, V]) buildPage(number int) *page[K, V] {
 	var entries []Entry[K, V]
 	// fmt.Printf("building page #%d ...\n", number)
 	var err error
-	fmt.Printf("pushed entries: %d\n", len(*p.pushed))
-	for entry := range *p.pushed {
+	// fmt.Printf("pushed entries: %d\n", len(*p.pushed))
+	for entry := range p.pushed {
 		if entry.Error() != nil {
 			err = entry.Error()
 			break
@@ -201,49 +199,38 @@ func (p *paginer[K, V]) All() iter.Seq[Entry[K, V]] {
 // Current implem preload all page items (pageSize & preloadPageCount are important).
 // pusher func must be implemented to push each items to paginer using push function.
 // if push function return false pusher func MUST stop.
-func NewPaginer[K comparable, V any](pageSize, preloadPageCount int, pusher func(push func(e Entry[K, V]) bool)) *paginer[K, V] {
-	p, err := NewReinitablePaginer(pageSize, preloadPageCount, pusher, nil)
-	if err != nil {
-		// Should never error because no onReset func supplied
-		panic(err)
-	}
-	return p
-}
-
-// onReset callback is called on Reset() call but also on paginer init.
-func NewReinitablePaginer[K comparable, V any](pageSize, preloadPageCount int,
-	pusher func(push func(e Entry[K, V]) bool),
-	reinit func() error) (*paginer[K, V], error) {
-	c := make(chan Entry[K, V], pageSize*preloadPageCount)
+func NewPaginer[K comparable, V any](pageSize, preloadPageCount int,
+	pusher func(push func(e Entry[K, V]) bool)) *paginer[K, V] {
 	p := &paginer[K, V]{
 		pageSize:     pageSize,
 		preloadCount: preloadPageCount,
 		loaded:       make([]*page[K, V], 0),
-		pushed:       &c,
+		pushed:       make(chan Entry[K, V], pageSize*preloadPageCount),
 		current:      -1,
-		reinit:       reinit,
-	}
-
-	if p.reinit != nil {
-		err := p.reinit()
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	go func() {
 		pusher(func(e Entry[K, V]) bool {
-			*p.pushed <- e
+			p.pushed <- e
 			// fmt.Printf("pushed entry %s in paginer\n", e)
 			return !p.closed && e.Error() == nil
 		})
 		// When all items were pushed close the channel
-		close(*p.pushed)
+		close(p.pushed)
 	}()
 
 	// Build first page
 	first := p.buildPage(0)
 	p.loaded = append(p.loaded, first)
 
-	return p, nil
+	return p
+}
+
+// Updatable Paginer may be updated with new data when pusher func is terminated.
+func NewUpdatablePaginer[K comparable, V any](pageSize, preloadPageCount int, pusher func(push func(e Entry[K, V]) bool)) *paginer[K, V] {
+	// - if rerunning pusher should keep a state to not repush everything ?
+	// - change pusher ?
+	// - use a new updater callback ?
+	// HOW TO ?
+	panic("not implemented yet")
 }

@@ -123,7 +123,7 @@ func (c BasicIndexCat[K, V]) concat(order Order, f func(i Index[K, V]) (Paginer[
 			}
 		}
 
-		fmt.Printf("cat paginer initialized chans: %d\n", len(*chans))
+		// fmt.Printf("cat paginer initialized chans: %d\n", len(*chans))
 		return nil
 	}
 
@@ -142,7 +142,7 @@ func (c BasicIndexCat[K, V]) concat(order Order, f func(i Index[K, V]) (Paginer[
 		defer func() {
 			stop = true
 		}()
-		fmt.Printf("paginer chans: %d\n", len(*chans))
+		// fmt.Printf("paginer chans: %d\n", len(*chans))
 		partitions := collectionz.Keys(*nextEntries)
 	End:
 		for len(partitions) > 0 {

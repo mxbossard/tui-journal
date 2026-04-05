@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mxbossard/utilz/ptrz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +30,8 @@ func TestPaginer_Empty(t *testing.T) {
 func TestPaginer_Pages(t *testing.T) {
 	expectedPageSize := 3
 	expectedPreloadCount := 2
-	expectedCount := 10
+	var expectedCount *int
+	expectedCount = ptrz.IntPtr(10)
 
 	k := 0
 	var expectedMessages []string
@@ -45,7 +47,7 @@ func TestPaginer_Pages(t *testing.T) {
 				break
 			}
 			k++
-			if k >= expectedCount {
+			if k >= *expectedCount {
 				// End source
 				// fmt.Printf("source end reached\n")
 				break
@@ -61,7 +63,7 @@ func TestPaginer_Pages(t *testing.T) {
 		assert.Equal(t, i, page.Number(), "bad page number")
 		i++
 	}
-	assert.Equal(t, expectedCount/expectedPageSize+1, i, "bad page count")
+	assert.Equal(t, *expectedCount/expectedPageSize+1, i, "bad page count")
 
 	// 2 consecutive operations should works
 	i = 0
@@ -71,7 +73,18 @@ func TestPaginer_Pages(t *testing.T) {
 		assert.Equal(t, i, page.Number(), "bad page number")
 		i++
 	}
-	assert.Equal(t, expectedCount/expectedPageSize+1, i, "bad page count")
+	assert.Equal(t, *expectedCount/expectedPageSize+1, i, "bad page count")
+
+	// 3 add data to paginer NOT IMPLEMENTED
+	// expectedCount = ptrz.IntPtr(*expectedCount + expectedPageSize)
+	// i = 0
+	// for err, page := range p.Pages() {
+	// 	assert.NoError(t, err)
+	// 	require.NotNil(t, p)
+	// 	assert.Equal(t, i, page.Number(), "bad page number")
+	// 	i++
+	// }
+	// assert.Equal(t, *expectedCount/expectedPageSize+1, i, "bad page count")
 }
 
 func TestPaginer_Next(t *testing.T) {
@@ -91,7 +104,7 @@ func TestPaginer_Next(t *testing.T) {
 			expectedMessages = append(expectedMessages, msg)
 			now := time.Now()
 			e := NewEntry(k, msg, k, now, []byte("foobarba"), nil, nil)
-			fmt.Printf("pushing entry: [%s] ...\n", e)
+			// fmt.Printf("pushing entry: [%s] ...\n", e)
 			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break
@@ -223,7 +236,7 @@ func TestPaginer_All(t *testing.T) {
 			expectedMessages = append(expectedMessages, msg)
 			now := time.Now()
 			e := NewEntry(k, msg, k, now, []byte("foobarba"), nil, nil)
-			fmt.Printf("pushing entry: [%s] ...\n", e)
+			// fmt.Printf("pushing entry: [%s] ...\n", e)
 			if !push(e) {
 				// fmt.Printf("breaked!\n")
 				break
@@ -289,7 +302,7 @@ func TestPaginer_All_OneItem(t *testing.T) {
 		expectedMessages = append(expectedMessages, msg)
 		now := time.Now()
 		e := NewEntry(k, msg, k, now, []byte("foobarba"), nil, nil)
-		fmt.Printf("pushing entry: [%s] ...\n", e)
+		// fmt.Printf("pushing entry: [%s] ...\n", e)
 		push(e)
 	})
 	require.NotNil(t, p)
