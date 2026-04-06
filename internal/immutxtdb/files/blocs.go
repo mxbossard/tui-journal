@@ -30,16 +30,16 @@ type HeaderRef filez.BlocPart
 
 // Get a BlocWriter to write data
 // FIXME: NEED to synchronize blocs writes & reads in a dedicated service (which may cache BlocsFile).
-func GetBlocWriter(dir, device, qualifier string) (*filez.BlocWriter, error) {
+func GetBlocWriter(dir, partition, qualifier string) (*filez.BlocWriter, error) {
 	dir = filepath.Join(dir, qualifier)
 	err := os.MkdirAll(dir, 0700)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get bloc writer [%s] [%s] [%s]: %w", dir, device, qualifier, err)
+		return nil, fmt.Errorf("unable to get bloc writer [%s] [%s] [%s]: %w", dir, partition, qualifier, err)
 	}
-	firstDeviceFilepath := filepath.Join(dir, fmt.Sprintf("%s-%s-001.idx", qualifier, device))
-	dbf1, err := filez.NewBlocsFile(firstDeviceFilepath, DataBlocCapacity, DataBlocThresholdSize)
+	firstPartitionFilepath := filepath.Join(dir, fmt.Sprintf("%s-%s-001.idx", qualifier, partition))
+	dbf1, err := filez.NewBlocsFile(firstPartitionFilepath, DataBlocCapacity, DataBlocThresholdSize)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get bloc writer [%s] [%s] [%s]: %w", dir, device, qualifier, err)
+		return nil, fmt.Errorf("unable to get bloc writer [%s] [%s] [%s]: %w", dir, partition, qualifier, err)
 	}
 
 	return dbf1.Writer(), nil
@@ -54,15 +54,15 @@ func GetBloc(path string, blocId int) (*filez.Bloc, error) {
 	return dbf1.Get(blocId)
 }
 
-func StoreBlocData(dir, device, qualifier string, data []byte) (*filez.VirtualBloc, error) {
-	blocWriter, err := GetBlocWriter(dir, device, qualifier)
+func StoreBlocData(dir, partition, qualifier string, data []byte) (*filez.VirtualBloc, error) {
+	blocWriter, err := GetBlocWriter(dir, partition, qualifier)
 	if err != nil {
-		return nil, fmt.Errorf("unable to store blocRef [%s] [%s] [%s]: %w", dir, device, qualifier, err)
+		return nil, fmt.Errorf("unable to store blocRef [%s] [%s] [%s]: %w", dir, partition, qualifier, err)
 	}
 
 	p, err := blocWriter.Write(data)
 	if err != nil {
-		return nil, fmt.Errorf("unable to store blocRef [%s] [%s] [%s]: %w", dir, device, qualifier, err)
+		return nil, fmt.Errorf("unable to store blocRef [%s] [%s] [%s]: %w", dir, partition, qualifier, err)
 	}
 	n := len(data)
 	if p != n {

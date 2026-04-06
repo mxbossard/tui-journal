@@ -29,8 +29,22 @@ var (
 )
 
 type BucketUid [16]byte
-type Labels map[string]string
 type Version int
+
+type Labels map[string]string
+
+func NewLabels(labels ...string) Labels {
+	l := make(Labels)
+	for k := 0; k <= len(labels); k += 2 {
+		key := labels[k]
+		if len(labels) < k+2 {
+			panic(fmt.Sprintf("missing label value for key: %s", key))
+		}
+		val := labels[k+1]
+		l[key] = val
+	}
+	return l
+}
 
 // Store Layer Metadata
 type Metadata struct {
@@ -74,9 +88,9 @@ type Bucket struct {
 	service Service
 
 	// lastHashedUid HashedBucketUid
-	header Header
+	Header Header
 	// Last layer Metadata
-	metadata *Metadata
+	Metadata *Metadata
 
 	maxLoadedVersion    Version
 	layerIt             iter.Seq2[error, *Layer]
@@ -103,7 +117,7 @@ func newBucket(s Service) *Bucket {
 
 func newNamedBucket(s Service, uid BucketUid, name string) *Bucket {
 	b := newBucket(s)
-	b.header = Header{
+	b.Header = Header{
 		Uid:  uid,
 		Name: name,
 	}
@@ -133,14 +147,14 @@ func (b *Bucket) ProjectText(version Version) (txt string, err error) {
 }
 
 func (b *Bucket) Write(data []byte) (int, error) {
-	if b.header.Mode == TextMode {
+	if b.Header.Mode == TextMode {
 		return -1, fmt.Errorf("use WriteText for text mode bucket")
 	}
 
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
-	if b.header.Mode == 0 {
-		b.header.Mode = BinaryMode
+	if b.Header.Mode == 0 {
+		b.Header.Mode = BinaryMode
 	}
 	b.data = data
 	b.saved = false
@@ -150,11 +164,11 @@ func (b *Bucket) Write(data []byte) (int, error) {
 func (b *Bucket) WriteText(text string) error {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
-	if b.header.Mode != 0 && b.header.Mode != TextMode {
+	if b.Header.Mode != 0 && b.Header.Mode != TextMode {
 		return fmt.Errorf("not a text mode bucket")
 	}
-	if b.header.Mode == 0 {
-		b.header.Mode = TextMode
+	if b.Header.Mode == 0 {
+		b.Header.Mode = TextMode
 	}
 	b.stringData = text
 	b.saved = false
@@ -165,24 +179,6 @@ func (b *Bucket) Labels(labels Labels) error {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 	panic("not implemented yet")
-}
-
-func (b *Bucket) Save() error {
-	b.Mutex.Lock()
-	defer b.Mutex.Unlock()
-	return b.service.save(b)
-}
-
-func (b *Bucket) Commit() error {
-	b.Mutex.Lock()
-	defer b.Mutex.Unlock()
-	return b.service.commit(b)
-}
-
-func (b *Bucket) Squash() error {
-	b.Mutex.Lock()
-	defer b.Mutex.Unlock()
-	return b.service.squash(b)
 }
 
 func projectText(b *Bucket, version Version) (string, error) {

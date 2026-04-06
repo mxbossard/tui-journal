@@ -64,18 +64,18 @@ type basicIndex[K comparable, V any] struct {
 	*sync.Mutex
 	// FIXME: add a filelock
 
-	name, partition  string
-	keySerializer    serialize.Serializer[K]
-	valSerializer    serialize.Serializer[V]
-	keyHasher        RotatingHasher
-	valHasher        RotatingHasher
-	encoder          IdxEncoder // FIXME: encoder must be attached to each BlocsFile or to each Bloc !
-	pageSize         int
-	preloadPageCount int
-	filepathes       []string
-	deviceIdxFiles   []*filez.BlocsFile
-	otherIdxFiles    []*filez.BlocsFile
-	seqs             map[string]int
+	name, partition   string
+	keySerializer     serialize.Serializer[K]
+	valSerializer     serialize.Serializer[V]
+	keyHasher         RotatingHasher
+	valHasher         RotatingHasher
+	encoder           IdxEncoder // FIXME: encoder must be attached to each BlocsFile or to each Bloc !
+	pageSize          int
+	preloadPageCount  int
+	filepathes        []string
+	partitionIdxFiles []*filez.BlocsFile
+	otherIdxFiles     []*filez.BlocsFile
+	seqs              map[string]int
 }
 
 // Create a Basic Index.
@@ -89,32 +89,32 @@ func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
 	// FIXME: manage multiple idx files (rotation)
 	// FIXME: add a filelock
 	// FIXME: addRotatingHash ?
-	firstDeviceFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", name, partition))
-	dbf1, err := filez.NewBlocsFile(firstDeviceFilepath, 256, 100)
+	firstPartitionFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", name, partition))
+	dbf1, err := filez.NewBlocsFile(firstPartitionFilepath, 256, 100)
 	if err != nil {
 		return nil, fmt.Errorf("unable to build blocs file: %w", err)
 	}
 	idx := &basicIndex[K, V]{
-		Mutex:            &sync.Mutex{},
-		name:             name,
-		partition:        partition,
-		keySerializer:    keySer,
-		valSerializer:    valSer,
-		keyHasher:        keyH,
-		valHasher:        valH,
-		encoder:          enc,
-		pageSize:         pageSize,
-		preloadPageCount: preloadPageCount,
-		deviceIdxFiles:   []*filez.BlocsFile{dbf1},
-		otherIdxFiles:    nil,
-		seqs:             make(map[string]int),
+		Mutex:             &sync.Mutex{},
+		name:              name,
+		partition:         partition,
+		keySerializer:     keySer,
+		valSerializer:     valSer,
+		keyHasher:         keyH,
+		valHasher:         valH,
+		encoder:           enc,
+		pageSize:          pageSize,
+		preloadPageCount:  preloadPageCount,
+		partitionIdxFiles: []*filez.BlocsFile{dbf1},
+		otherIdxFiles:     nil,
+		seqs:              make(map[string]int),
 	}
 
 	// FIXME: need to setup the encoder!
 	//e.Setup()
 
 	// TODO: need to load idx.seqs !
-	for _, bf := range idx.deviceIdxFiles {
+	for _, bf := range idx.partitionIdxFiles {
 		// Decode last line of last bloc to get current seq
 		bloc, err := bf.GetLastNonEmptyBloc()
 		if err == filez.ErrNotExist {
@@ -136,8 +136,8 @@ func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
 	return idx, nil
 }
 
-func (i *basicIndex[K, V]) selectDeviceBlocFile(s State, k K) *filez.BlocsFile {
-	return i.deviceIdxFiles[0]
+func (i *basicIndex[K, V]) selectPartitionBlocFile(s State, k K) *filez.BlocsFile {
+	return i.partitionIdxFiles[0]
 }
 
 func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], error) {
@@ -160,7 +160,7 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 		panic("cannot convert key to []byte, need a keySerializer")
 	}
 
-	bf := i.selectDeviceBlocFile(normalizedState, k)
+	bf := i.selectPartitionBlocFile(normalizedState, k)
 	bfName := bf.Name()
 	seq := i.seqs[bfName]
 
@@ -233,7 +233,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 		}
 	}
 
-	idxFiles := append(i.deviceIdxFiles, i.otherIdxFiles...)
+	idxFiles := append(i.partitionIdxFiles, i.otherIdxFiles...)
 	p := NewPaginer(i.pageSize, i.preloadPageCount, func(push func(Entry[K, V]) bool) {
 		// pusher func impl
 
