@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/bucket"
@@ -27,12 +28,11 @@ func NewTwoPhasesStore(dir, salt string) (*TwoPhasesStore, error) {
 	// Add a bucket.NewPartedBucketService ?
 	// Update Service to manage multiple partitions ?
 	// FIXME ephemeral store should be stored in home local cache dir ?
-	partition := "foo"
-	eStore, err := bucket.NewBucketService(filepath.Join(dir, "ephemeral"), partition, salt)
+	eStore, err := bucket.NewBucketService(filepath.Join(dir, "ephemeral"), salt)
 	if err != nil {
 		return nil, err
 	}
-	rStore, err := bucket.NewBucketService(filepath.Join(dir, "rested"), partition, salt)
+	rStore, err := bucket.NewBucketService(filepath.Join(dir, "rested"), salt)
 	if err != nil {
 		return nil, err
 	}
@@ -44,15 +44,16 @@ func NewTwoPhasesStore(dir, salt string) (*TwoPhasesStore, error) {
 	return s, nil
 }
 
-func (s TwoPhasesStore) NewBucket(name, partition string, labels bucket.Labels) *bucket.Bucket {
-	b := s.ephemeral.New(name, partition, labels)
+func (s TwoPhasesStore) NewBucket(name string, labels bucket.Labels) *bucket.Bucket {
+	b := s.ephemeral.New(name, labels)
 	s.namesCache[name] = b.Header.Uid
 	return b
 }
 
 // Save in ephemeral store
 func (s TwoPhasesStore) Save(b *bucket.Bucket) error {
-	err := s.ephemeral.Save(b)
+	partition := fmt.Sprintf("%x", b.Header.Uid)
+	err := s.ephemeral.Save(b, partition)
 	return err
 }
 

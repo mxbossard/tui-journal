@@ -356,3 +356,12 @@ Implem ideas:
     - SHOULD decorelate Bucket and Service to be able to pass a Bucket from EphemeralService to RestedService.
     
 
+## Parted Bucjet service ?
+- If a service is parted, a choose to which part attach a bucket. BUT, it's not Bucket which are attached to part but Idx.
+- => Do not attach bucket to part but supply a part to Save a Bucket.
+- Allow filtering on a partition
+- Add a partition destroying method ?
+- When scanning buckets of a service need to check all partitions of service dir
+- Only one service MUST be attached to one dir !
+- How to save a bucket on multiple partitions ?
+- 

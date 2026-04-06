@@ -27,9 +27,8 @@ func TestStore_NewBucket(t *testing.T) {
 	assert.NotNil(t, s)
 
 	expectedName := "b1"
-	expectedPart := "part1"
 	expectedLabels := bucket.NewLabels("foo", "bar")
-	b := s.NewBucket(expectedName, expectedPart, expectedLabels)
+	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
 
 	assert.Equal(t, expectedName, b.Header.Name)
@@ -44,9 +43,8 @@ func TestStore_Save(t *testing.T) {
 	assert.NotNil(t, s)
 
 	expectedName := "b1"
-	expectedPart := "part1"
 	expectedLabels := bucket.NewLabels("foo", "bar")
-	b := s.NewBucket(expectedName, expectedPart, expectedLabels)
+	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
 
 	err = s.Save(b)
@@ -83,9 +81,8 @@ func TestStore_Get(t *testing.T) {
 	assert.NotNil(t, s)
 
 	expectedName := "b1"
-	expectedPart := "part1"
 	expectedLabels := bucket.NewLabels("foo", "bar")
-	b := s.NewBucket(expectedName, expectedPart, expectedLabels)
+	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
 
 	// Get after Save

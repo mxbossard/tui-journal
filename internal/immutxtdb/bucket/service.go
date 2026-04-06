@@ -59,59 +59,30 @@ type Service interface {
 	// Get a slice of Buckets
 	Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
 	// Save a Bucket
-	Save(b *Bucket) error
+	Save(b *Bucket, partition string) error
 
 	buildLayerIt(b *Bucket, v Version) (iter.Seq2[error, *Layer], error)
 }
 
 type bucketService struct {
-	dir       string
-	partition string
-	salt      string
+	dir string
+	// partition string
+	salt string
 
-	bucketNameIdx BucketNameIndex
-	headerRefIdx  HeaderRefIndex
-	bucketRefIdx  BucketRefIndex
+	// bucketNameIdx BucketNameIndex
+	// headerRefIdx  HeaderRefIndex
+	// bucketRefIdx  BucketRefIndex
 }
 
-func NewBucketService(dir, partition, salt string) (*bucketService, error) {
-	bucketIdxDir := filepath.Join(dir, "bucketIdx")
-	bucketByTimeIdxDir := filepath.Join(dir, "bucketByTimeIdx")
-	layerIdxDir := filepath.Join(dir, "layerIdx")
-
-	err := os.MkdirAll(bucketIdxDir, 0700)
-	if err != nil {
-		return nil, err
-	}
-	bucketNameIdx, err := newBucketNameIndex(bucketIdxDir, partition)
-	if err != nil {
-		return nil, err
-	}
-	err = os.MkdirAll(bucketByTimeIdxDir, 0700)
-	if err != nil {
-		return nil, err
-	}
-	headerRefIdx, err := newHeaderRefIndex(bucketByTimeIdxDir, partition, salt)
-	if err != nil {
-		return nil, err
-	}
-	err = os.MkdirAll(layerIdxDir, 0700)
-	if err != nil {
-		return nil, err
-	}
-	bucketRefIdx, err := newBucketRefIndex(layerIdxDir, partition, salt)
-	if err != nil {
-		return nil, err
-	}
-
+func NewBucketService(dir, salt string) (*bucketService, error) {
 	return &bucketService{
-		dir:       dir,
-		partition: partition,
-		salt:      salt,
+		dir: dir,
+		// partition: partition,
+		salt: salt,
 
-		bucketNameIdx: bucketNameIdx,
-		headerRefIdx:  headerRefIdx,
-		bucketRefIdx:  bucketRefIdx,
+		// bucketNameIdx: bucketNameIdx,
+		// headerRefIdx:  headerRefIdx,
+		// bucketRefIdx:  bucketRefIdx,
 	}, nil
 }
 
@@ -132,7 +103,7 @@ func (s *bucketService) NewText(name string, labels Labels, text string) (*Bucke
 	return b, err
 }
 
-func (s *bucketService) create(b *Bucket) error {
+func (s *bucketService) create(b *Bucket, partition string) error {
 	if b.Header.Created == nil {
 		now := time.Now()
 		b.Header.Created = &now
@@ -156,20 +127,25 @@ func (s *bucketService) create(b *Bucket) error {
 		return fmt.Errorf("create: no data to save")
 	}
 
+	bucketNameIdx, headerRefIdx, bucketRefIdx, err := getServiceIndexes(s.dir, s.salt, partition)
+	if err != nil {
+		return err
+	}
+
 	// TODO: 1- Add (name, uid) in bucketName Idx
-	_, err := s.bucketNameIdx.Add(dummyState, *b.Header.Created, b.Header.Name, b.Header.Uid)
+	_, err = bucketNameIdx.Add(dummyState, *b.Header.Created, b.Header.Name, b.Header.Uid)
 	if err != nil {
 		return fmt.Errorf("create: unable to add bucket name: %w", err)
 	}
 
 	// TODO: 3- store Header, Layer & Metadata
-	headerRef, err := storeHeader(s.dir, s.partition, &b.Header)
+	headerRef, err := storeHeader(s.dir, partition, &b.Header)
 	if err != nil {
 		b.Header.Created = nil
 		return fmt.Errorf("create: unable to store header: %w", err)
 	}
 
-	layerRef, err := storeLayerData(s.dir, s.partition, data)
+	layerRef, err := storeLayerData(s.dir, partition, data)
 	if err != nil {
 		return fmt.Errorf("create: unable to store layer: %w", err)
 	}
@@ -179,7 +155,7 @@ func (s *bucketService) create(b *Bucket) error {
 		Size:    dataLen,
 		Updated: b.Header.Created,
 	}
-	metadataRef, err := storeMetadata(s.dir, s.partition, &metadata)
+	metadataRef, err := storeMetadata(s.dir, partition, &metadata)
 	if err != nil {
 		return fmt.Errorf("create: unable to store metadata: %w", err)
 	}
@@ -191,7 +167,7 @@ func (s *bucketService) create(b *Bucket) error {
 	}
 
 	// TODO: 5- Add (RhUid, headerRef) in headerRef Idx
-	hrEntry, err := s.headerRefIdx.Add(dummyState, *b.Header.Created, b.Header.Uid, headerRef)
+	hrEntry, err := headerRefIdx.Add(dummyState, *b.Header.Created, b.Header.Uid, headerRef)
 	if err != nil {
 		return fmt.Errorf("create: unable to add header ref: %w", err)
 	}
@@ -199,7 +175,7 @@ func (s *bucketService) create(b *Bucket) error {
 	// hashedUid := HashedBucketUid(hrEntry.KeyBytes())
 
 	// TODO: 6- Add (HUid, bucketRef) in bucketRef Idx
-	brEntry, err := s.bucketRefIdx.Add(RootLayerState, *b.Header.Created, b.Header.Uid, &bucketRef)
+	brEntry, err := bucketRefIdx.Add(RootLayerState, *b.Header.Created, b.Header.Uid, &bucketRef)
 	if err != nil {
 		return fmt.Errorf("create: unable to add bucket ref: %w", err)
 	}
@@ -222,7 +198,7 @@ func (s *bucketService) create(b *Bucket) error {
 	return nil
 }
 
-func (s *bucketService) update(b *Bucket) error {
+func (s *bucketService) update(b *Bucket, partition string) error {
 	now := time.Now()
 
 	// TODO: 1- Attempt to make a patch of the update.
@@ -284,15 +260,19 @@ func (s *bucketService) update(b *Bucket) error {
 	}
 
 	// hashedUid := b.lastHashedUid
+	_, headerRefIdx, bucketRefIdx, err := getServiceIndexes(s.dir, s.salt, partition)
+	if err != nil {
+		return err
+	}
 
 	// TODO: 2- Add (RhUid, headerRef) in headerRef Idx if Header changed
 	if b.Header.changed {
 		// TODO store header + headerRef
-		headerRef, err := storeHeader(s.dir, s.partition, &b.Header)
+		headerRef, err := storeHeader(s.dir, partition, &b.Header)
 		if err != nil {
 			return fmt.Errorf("update: unable store header: %w", err)
 		}
-		entry, err := s.headerRefIdx.Add(dummyState, now, b.Header.Uid, headerRef)
+		entry, err := headerRefIdx.Add(dummyState, now, b.Header.Uid, headerRef)
 		if err != nil {
 			return fmt.Errorf("update: unable to add header ref: %w", err)
 		}
@@ -311,11 +291,11 @@ func (s *bucketService) update(b *Bucket) error {
 		layerState = DiffLayerState
 	}
 
-	layerRef, err := storeLayerData(s.dir, s.partition, data)
+	layerRef, err := storeLayerData(s.dir, partition, data)
 	if err != nil {
 		return fmt.Errorf("update: unable store layer: %w", err)
 	}
-	metadataRef, err := storeMetadata(s.dir, s.partition, newMetadata)
+	metadataRef, err := storeMetadata(s.dir, partition, newMetadata)
 	if err != nil {
 		return fmt.Errorf("update: unable store metadata: %w", err)
 	}
@@ -327,7 +307,7 @@ func (s *bucketService) update(b *Bucket) error {
 	}
 
 	// TODO: 4- Add (HUid, bucketRef) in bucketRef Idx
-	brEntry, err := s.bucketRefIdx.Add(layerState, now, b.Header.Uid, &bucketRef)
+	brEntry, err := bucketRefIdx.Add(layerState, now, b.Header.Uid, &bucketRef)
 	if err != nil {
 		return fmt.Errorf("update: unable to add bucket ref: %w", err)
 	}
@@ -349,16 +329,16 @@ func (s *bucketService) update(b *Bucket) error {
 	return nil
 }
 
-func (s *bucketService) Save(b *Bucket) error {
+func (s *bucketService) Save(b *Bucket, partition string) error {
 	if b.saved {
 		return nil
 	}
 
 	// 1- Check if supplied bucket already exists
 	if b.Metadata == nil {
-		return s.create(b)
+		return s.create(b, partition)
 	}
-	return s.update(b)
+	return s.update(b, partition)
 }
 
 func getLastBucketHeader(paginer idx.Paginer[BucketUid, *HeaderRef]) (*Header, error) {
@@ -676,4 +656,55 @@ func generateRandUid() BucketUid {
 		panic(err)
 	}
 	return BucketUid(randBytes)
+}
+
+func forgeIndexesDir(dir, partition string) (string, string, string, error) {
+	bucketIdxDir := filepath.Join(dir, partition, "bucketIdx")
+	headerRefIdxDir := filepath.Join(dir, partition, "headerRefIdx")
+	bucketRefIdxDir := filepath.Join(dir, partition, "bucketRefIdx")
+
+	err := os.MkdirAll(bucketIdxDir, 0700)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	err = os.MkdirAll(headerRefIdxDir, 0700)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	err = os.MkdirAll(bucketRefIdxDir, 0700)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return bucketIdxDir, headerRefIdxDir, bucketRefIdxDir, nil
+}
+
+func getServiceIndexes(dir, salt, partition string) (BucketNameIndex,
+	HeaderRefIndex, BucketRefIndex, error) {
+	bucketIdxDir, headerRefIdxDir, bucketRefIdxDir, err := forgeIndexesDir(dir, partition)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	bucketNameIdx, err := newBucketNameIndex(bucketIdxDir, "")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	headerRefIdx, err := newHeaderRefIndex(headerRefIdxDir, "", salt)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	bucketRefIdx, err := newBucketRefIndex(bucketRefIdxDir, "", salt)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return bucketNameIdx, headerRefIdx, bucketRefIdx, nil
+}
+
+func scanServicePartitions(dir string) ([]string, error) {
+	dirs, err := filepath.Glob(filepath.Join(dir, "*"))
+	return dirs, err
 }

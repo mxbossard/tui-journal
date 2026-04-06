@@ -18,9 +18,8 @@ func Test_NewBucketService(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("Test_NewBucketService")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
 	expectedSalt := "salt"
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 }
@@ -29,11 +28,10 @@ func TestBucketService_New(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_New")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
 	expectedSalt := "salt"
 	expectedName := "foo"
 
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
