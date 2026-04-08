@@ -63,11 +63,12 @@ type Layer struct {
 
 // Store Bucket metadata which rarely changes
 type Header struct {
-	Uid     BucketUid
-	Name    string
-	Created *time.Time
-	Labels  Labels
-	Mode    int8
+	Uid      BucketUid
+	Name     string
+	Created  *time.Time
+	Modified *time.Time // Header modification time
+	Labels   Labels
+	Mode     int8
 
 	changed bool
 }

@@ -43,7 +43,7 @@ func TestBucketService_Save(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Save")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
+	expectedPartition := "device"
 	expectedSalt := "salt"
 	expectedName := "foo"
 	expectedMsg := ztring.LoremIpsumWords(10)
@@ -54,7 +54,7 @@ func TestBucketService_Save(t *testing.T) {
 		"bar": "paf0",
 	}
 
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
@@ -70,7 +70,7 @@ func TestBucketService_Save(t *testing.T) {
 
 	before3 := time.Now()
 
-	err = svc.Save(bkt)
+	err = svc.Save(bkt, expectedPartition)
 	assert.NoError(t, err)
 
 	after := time.Now()
@@ -111,11 +111,10 @@ func TestBucketService_Get_Not_Existing(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Get_Not_Existing")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
 	expectedSalt := "salt"
 	expectedBucketUid := BucketUid([]byte{42, 17, 42, 17, 42, 17, 42, 17, 42, 17, 42, 17, 42, 17, 42, 17})
 
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
@@ -128,7 +127,7 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Save_And_Get")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
+	expectedPartition := "device"
 	expectedSalt := "salt"
 	expectedName := "foo"
 	expectedMsg := ztring.LoremIpsumWords(10)
@@ -139,7 +138,7 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 		"bar": "paf",
 	}
 
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
@@ -150,7 +149,7 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 	assert.NoError(t, err)
 
 	before := time.Now()
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 	after := time.Now()
 
@@ -216,7 +215,7 @@ func TestBucketService_Names(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Names")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
+	expectedPartition := "device"
 	expectedSalt := "salt"
 	expectedName1 := "foo"
 	expectedMsg1 := ztring.LoremIpsumWords(10)
@@ -229,7 +228,7 @@ func TestBucketService_Names(t *testing.T) {
 		"bar": "paf",
 	}
 
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
@@ -238,21 +237,21 @@ func TestBucketService_Names(t *testing.T) {
 	assert.NotNil(t, bkt1)
 	err = bkt1.WriteText(expectedMsg1)
 	assert.NoError(t, err)
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
 	bkt2 := svc.New(expectedName2, expectedLabels)
 	assert.NotNil(t, bkt2)
 	err = bkt2.WriteText(expectedMsg2)
 	assert.NoError(t, err)
-	err = svc.Save(bkt2)
+	err = svc.Save(bkt2, expectedPartition)
 	assert.NoError(t, err)
 
 	bkt3 := svc.New(expectedName3, expectedLabels)
 	assert.NotNil(t, bkt3)
 	err = bkt3.WriteText(expectedMsg3)
 	assert.NoError(t, err)
-	err = svc.Save(bkt3)
+	err = svc.Save(bkt3, expectedPartition)
 	assert.NoError(t, err)
 
 	names, err := svc.Names()
@@ -267,7 +266,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Save_Edit_Save_Get")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
+	expectedPartition := "device"
 	expectedSalt := "salt"
 	expectedName := "foo"
 	expectedMsg1 := ztring.LoremIpsumWords(10)
@@ -277,7 +276,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 		"bar": "paf",
 	}
 
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
@@ -289,7 +288,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.NoError(t, err)
 
 	before1 := time.Now()
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 	after1 := time.Now()
 
@@ -311,7 +310,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 
 	// Second write
 	before2 := time.Now()
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 	after2 := time.Now()
 
@@ -419,7 +418,7 @@ func TestBucketService_ProjectText(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_ProjectText")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
+	expectedPartition := "device"
 	expectedSalt := "salt"
 	expectedName := "foo"
 	expectedMsg1 := ztring.LoremIpsumWords(2)
@@ -427,7 +426,7 @@ func TestBucketService_ProjectText(t *testing.T) {
 	expectedMsg3 := ztring.LoremIpsumWords(6)
 	expectedMsg4 := ztring.LoremIpsumWords(5)
 
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
@@ -437,22 +436,22 @@ func TestBucketService_ProjectText(t *testing.T) {
 	// First write
 	err = bkt1.WriteText(expectedMsg1)
 	assert.NoError(t, err)
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
 	err = bkt1.WriteText(expectedMsg2)
 	assert.NoError(t, err)
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
 	err = bkt1.WriteText(expectedMsg3)
 	assert.NoError(t, err)
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
 	err = bkt1.WriteText(expectedMsg4)
 	assert.NoError(t, err)
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
 	textLatest, err := bkt1.ProjectText(LatestVersion)
@@ -491,7 +490,7 @@ func TestBucketService_Filter(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Filter")
 	defer os.RemoveAll(tmpDir)
 
-	expectedDevice := "device"
+	expectedPartition := "device"
 	expectedSalt := "salt"
 	expectedName1 := "foo1"
 	expectedName2 := "foo2"
@@ -504,7 +503,7 @@ func TestBucketService_Filter(t *testing.T) {
 	expectedMsg4 := ztring.LoremIpsumWords(20)
 	expectedMsg5 := ztring.LoremIpsumWords(25)
 
-	svc, err := NewBucketService(tmpDir, expectedDevice, expectedSalt)
+	svc, err := NewBucketService(tmpDir, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
@@ -513,7 +512,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NotNil(t, bkt1)
 	day1 := dayTime("2026-03-01")
 	bkt1.Header.Created = day1
-	err = svc.Save(bkt1)
+	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
 	bkt2, err := svc.NewText(expectedName2, nil, expectedMsg2)
@@ -521,7 +520,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NotNil(t, bkt2)
 	day2 := dayTime("2026-03-02")
 	bkt2.Header.Created = day2
-	err = svc.Save(bkt2)
+	err = svc.Save(bkt2, expectedPartition)
 	assert.NoError(t, err)
 
 	bkt3, err := svc.NewText(expectedName3, nil, expectedMsg3)
@@ -529,7 +528,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NotNil(t, bkt3)
 	day3 := dayTime("2026-03-03")
 	bkt3.Header.Created = day3
-	err = svc.Save(bkt3)
+	err = svc.Save(bkt3, expectedPartition)
 	assert.NoError(t, err)
 
 	bkt4, err := svc.NewText(expectedName4, nil, expectedMsg4)
@@ -537,7 +536,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NotNil(t, bkt4)
 	day4 := dayTime("2026-03-04")
 	bkt4.Header.Created = day4
-	err = svc.Save(bkt4)
+	err = svc.Save(bkt4, expectedPartition)
 	assert.NoError(t, err)
 
 	bkt5, err := svc.NewText(expectedName5, nil, expectedMsg5)
@@ -545,7 +544,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NotNil(t, bkt5)
 	day5 := dayTime("2026-03-05")
 	bkt5.Header.Created = day5
-	err = svc.Save(bkt5)
+	err = svc.Save(bkt5, expectedPartition)
 	assert.NoError(t, err)
 
 	f := idx.AndFilter(idx.BeforeFilter(*day5), idx.AfterFilter(*day1))

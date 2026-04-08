@@ -200,7 +200,7 @@ func (p *paginer[K, V]) All() iter.Seq[Entry[K, V]] {
 // pusher func must be implemented to push each items to paginer using push function.
 // if push function return false pusher func MUST stop.
 func NewPaginer[K comparable, V any](pageSize, preloadPageCount int,
-	pusher func(push func(e Entry[K, V]) bool)) *paginer[K, V] {
+	pusher func(push func(e Entry[K, V]) bool)) Paginer[K, V] {
 	p := &paginer[K, V]{
 		pageSize:     pageSize,
 		preloadCount: preloadPageCount,

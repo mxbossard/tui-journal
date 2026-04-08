@@ -7,6 +7,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/files"
@@ -267,6 +268,7 @@ func (s *bucketService) update(b *Bucket, partition string) error {
 
 	// TODO: 2- Add (RhUid, headerRef) in headerRef Idx if Header changed
 	if b.Header.changed {
+		b.Header.Modified = &now
 		// TODO store header + headerRef
 		headerRef, err := storeHeader(s.dir, partition, &b.Header)
 		if err != nil {
@@ -341,54 +343,43 @@ func (s *bucketService) Save(b *Bucket, partition string) error {
 	return s.update(b, partition)
 }
 
-func getLastBucketHeader(paginer idx.Paginer[BucketUid, *HeaderRef]) (*Header, error) {
-	var lastHeader *Header
-	// FIXME: MUST use all HashedBucketUid !
-	for entry := range paginer.All() {
-		if entry.Error() != nil {
-			return nil, entry.Error()
-		}
-		var err error
-		lastHeader, err = loadHeader(entry.Val())
-		if err != nil {
-			return nil, err
-		}
-		// Keep only last bucket header found
-		break
-	}
-
-	if lastHeader == nil {
-		return nil, ErrNotExist
-	}
-
-	return lastHeader, nil
-}
-
 func (s *bucketService) buildLazyBucket(lastHeader *Header) (*Bucket, error) {
-	// 2- List all bucketRefs
-	// FIXME: which uid key ?
-	// FIXME: use state filter to stop on first root state ?
-	fmt.Printf("buildLazyBucket, bUid: %v\n", lastHeader.Uid)
-	bucketPgnr, err := s.bucketRefIdx.HashedPaginate(lastHeader.Uid, idx.BottomToTop)
+	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Printf("Loaded bucketRef for uid: %v / hash: %v\n", uid, lastBucketHashedUid)
 
-	// Use all layers until first root layer
 	var lastMetadata *Metadata
-
-	for entry := range bucketPgnr.All() {
-		if entry.Error() != nil {
-			return nil, entry.Error()
-		}
-		metadata, err := loadMetadata(&entry.Val().MetadataRef)
+	for _, partition := range existingParts {
+		bucketRefIdx, err := getBucketRefIndex(s.dir, s.salt, partition)
 		if err != nil {
 			return nil, err
 		}
-		if lastMetadata == nil {
-			lastMetadata = metadata
-			break
+
+		// 2- List all bucketRefs
+		// FIXME: which uid key ?
+		// FIXME: use state filter to stop on first root state ?
+		fmt.Printf("buildLazyBucket, bUid: %v\n", lastHeader.Uid)
+		bucketPgnr, err := bucketRefIdx.HashedPaginate(lastHeader.Uid, idx.BottomToTop)
+		if err != nil {
+			return nil, err
+		}
+		// fmt.Printf("Loaded bucketRef for uid: %v / hash: %v\n", uid, lastBucketHashedUid)
+
+		// Take last metadata
+
+		for entry := range bucketPgnr.All() {
+			if entry.Error() != nil {
+				return nil, entry.Error()
+			}
+			metadata, err := loadMetadata(&entry.Val().MetadataRef)
+			if err != nil {
+				return nil, err
+			}
+			if lastMetadata == nil || lastMetadata.Updated.Before(*metadata.Updated) {
+				lastMetadata = metadata
+				break
+			}
 		}
 	}
 
@@ -401,147 +392,222 @@ func (s *bucketService) buildLazyBucket(lastHeader *Header) (*Bucket, error) {
 }
 
 func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
-	// 1- Get last bucket header
-	headerPgnr, err := s.headerRefIdx.HashedPaginate(uid, idx.BottomToTop)
+	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
 		return nil, err
 	}
 
-	lastHeader, err := getLastBucketHeader(headerPgnr)
-	if err != nil {
-		return nil, err
+	var lastHeaderAllParts *Header
+	for _, partition := range existingParts {
+		// TODO: get last header for all parts
+
+		headerRefIdx, err := getHeaderRefIndex(s.dir, s.salt, partition)
+		if err != nil {
+			return nil, err
+		}
+
+		// 1- Get last bucket header
+		headerPgnr, err := headerRefIdx.HashedPaginate(uid, idx.BottomToTop)
+		if err != nil {
+			return nil, err
+		}
+
+		lastHeader, err := getLastBucketHeader(headerPgnr)
+		if err != nil {
+			return nil, err
+		}
+		if lastHeaderAllParts == nil || lastHeaderAllParts.Modified != nil && lastHeader.Modified != nil &&
+			lastHeaderAllParts.Modified.Before(*lastHeader.Modified) {
+			lastHeaderAllParts = lastHeader
+		}
 	}
 
-	return s.buildLazyBucket(lastHeader)
+	return s.buildLazyBucket(lastHeaderAllParts)
 }
 
 func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {
-	// Build a paginer of matching Buckets
-	// The paginer lazy load buckets
-	// panic("not implemented yet")
-
-	// 1- Get a paginer of matching Bucket headers
-	headerPgnr, err := s.headerRefIdx.FilterAll(o, f)
+	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
 		return nil, err
 	}
 
-	builtBuckets := make(map[BucketUid]*Bucket)
-	// 2- Return an iterator building a bucket for each header
-	return idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
-		for headerEntry := range headerPgnr.All() {
-			if headerEntry.Error() != nil {
-				if !push(idx.NewErrEntry[BucketUid, *Bucket](err)) {
-					break
-				}
-			}
-			if _, ok := builtBuckets[headerEntry.Key()]; ok {
-				// Bucket already built and pushed
-				continue
-			}
-			if err != nil {
-				if !push(idx.NewErrEntry[BucketUid, *Bucket](err)) {
-					break
-				}
-			}
-
-			lastHeader, err := loadHeader(headerEntry.Val())
-			if err != nil {
-				if !push(idx.NewErrEntry[BucketUid, *Bucket](err)) {
-					break
-				}
-			}
-			// lastBucketHashedUid := HashedBucketUid(headerEntry.KeyBytes())
-			b, err := s.buildLazyBucket(lastHeader)
-			builtBuckets[headerEntry.Key()] = b
-			if !push(idx.NewEntry(headerEntry.Key(), b, headerEntry.Seq(), headerEntry.Time(), headerEntry.State(), err, headerEntry.KeyBytes())) {
-				break
-			}
+	for _, partition := range existingParts {
+		headerRefIdx, err := getHeaderRefIndex(s.dir, s.salt, partition)
+		if err != nil {
+			return nil, err
 		}
-	}), nil
+
+		// Build a paginer of matching Buckets
+		// The paginer lazy load buckets
+		// panic("not implemented yet")
+
+		// 1- Get a paginer of matching Bucket headers
+		headerPgnr, err := headerRefIdx.FilterAll(o, f)
+		if err != nil {
+			return nil, err
+		}
+
+		var paginers []idx.Paginer[BucketUid, *Bucket]
+		builtBuckets := make(map[BucketUid]*Bucket)
+		// 2- Return an iterator building a bucket for each header
+		paginer := idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
+			for headerEntry := range headerPgnr.All() {
+				if headerEntry.Error() != nil {
+					if !push(idx.NewErrEntry[BucketUid, *Bucket](err)) {
+						break
+					}
+				}
+				if _, ok := builtBuckets[headerEntry.Key()]; ok {
+					// Bucket already built and pushed
+					continue
+				}
+				if err != nil {
+					if !push(idx.NewErrEntry[BucketUid, *Bucket](err)) {
+						break
+					}
+				}
+
+				lastHeader, err := loadHeader(headerEntry.Val())
+				if err != nil {
+					if !push(idx.NewErrEntry[BucketUid, *Bucket](err)) {
+						break
+					}
+				}
+				// lastBucketHashedUid := HashedBucketUid(headerEntry.KeyBytes())
+				b, err := s.buildLazyBucket(lastHeader)
+				builtBuckets[headerEntry.Key()] = b
+				if !push(idx.NewEntry(headerEntry.Key(), b, headerEntry.Seq(), headerEntry.Time(), headerEntry.State(), err, headerEntry.KeyBytes())) {
+					break
+				}
+			}
+		})
+		paginers = append(paginers, paginer)
+	}
+
+	panic("not implemented yet")
+	paginer := idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
+		// TODO: Merge paginers
+		// Ordered by time & partition
+	})
+
+	return paginer, nil
 }
 
+// FIXME: for now return last BucketUid by name found (last partition override previous ones)
 func (s *bucketService) Names() (map[string]BucketUid, error) {
-	nameIt, err := s.bucketNameIdx.All(idx.TopToBottom)
+	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
 		return nil, err
 	}
 
-	nameByUidMap := make(map[BucketUid]string)
 	lastUidByNameMap := make(map[string]BucketUid)
-	for entry := range nameIt {
-		if entry.Error() != nil {
-			return nil, entry.Error()
+	for _, partition := range existingParts {
+		bucketNameIdx, err := getBucketNameIndex(s.dir, s.salt, partition)
+		if err != nil {
+			return nil, err
 		}
-		nameByUidMap[BucketUid(entry.Val())] = entry.Key()
-		lastUidByNameMap[entry.Key()] = entry.Val()
+
+		nameIt, err := bucketNameIdx.All(idx.TopToBottom)
+		if err != nil {
+			return nil, err
+		}
+
+		nameByUidMap := make(map[BucketUid]string)
+		for entry := range nameIt {
+			if entry.Error() != nil {
+				return nil, entry.Error()
+			}
+			nameByUidMap[BucketUid(entry.Val())] = entry.Key()
+			lastUidByNameMap[entry.Key()] = entry.Val()
+		}
 	}
 
 	return lastUidByNameMap, nil
 }
 
 func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[error, *Layer], error) {
-	// We want to iterate over last layers only, starting with the last root layer by default.
-	// We may have some layers already loaded in b.loadedLayers.
-	// Need to iterate over all layers metadata
-	// Load content only if necessary
-
-	bucketPgnr, err := s.bucketRefIdx.HashedPaginate(b.Header.Uid, idx.BottomToTop)
+	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
 		return nil, err
 	}
 
-	// Eagerly load all Layer metadatas
-	for entry := range bucketPgnr.All() {
-		if entry.Error() != nil {
-			return nil, fmt.Errorf("error iterating bucketRefIdx: %w", entry.Error())
-		}
-		metadata, err := loadMetadata(&entry.Val().MetadataRef)
+	for _, partition := range existingParts {
+		bucketRefIdx, err := getBucketRefIndex(s.dir, s.salt, partition)
 		if err != nil {
-
+			return nil, err
 		}
-		b.loadedBucketEntries[metadata.Version] = &entry
-		b.loadedMetadatas[metadata.Version] = metadata
-		b.maxLoadedVersion = max(b.maxLoadedVersion, metadata.Version)
-	}
 
-	if version == LatestVersion {
-		version = b.maxLoadedVersion
-	}
+		// We want to iterate over last layers only, starting with the last root layer by default.
+		// We may have some layers already loaded in b.loadedLayers.
+		// Need to iterate over all layers metadata
+		// Load content only if necessary
 
-	// First implem : for now take all layers
-	firstVersion := FirstLayerVersion
-	return func(yield func(error, *Layer) bool) {
-		for v := firstVersion; v <= version; v++ {
-			var ok bool
-			var l *Layer
-			if l, ok = b.loadedLayers[v]; !ok {
-				// Layer not already loaded
-				bucketEntry, ok := b.loadedBucketEntries[v]
-				if !ok {
-					panic(fmt.Sprintf("bucketEntry v%d not loaded", v))
-				}
-				// data, err := files.LoadBlocPart((*filez.BlocPart)(&(*bucketEntry).Val().LayerRef))
-				data, err := loadLayerData(&(*bucketEntry).Val().LayerRef)
-				if err != nil {
-					if !yield(err, nil) {
-						break
+		bucketPgnr, err := bucketRefIdx.HashedPaginate(b.Header.Uid, idx.BottomToTop)
+		if err != nil {
+			return nil, err
+		}
+
+		var iterators []iter.Seq2[error, *Layer]
+		// Eagerly load all Layer metadatas
+		for entry := range bucketPgnr.All() {
+			if entry.Error() != nil {
+				return nil, fmt.Errorf("error iterating bucketRefIdx: %w", entry.Error())
+			}
+			metadata, err := loadMetadata(&entry.Val().MetadataRef)
+			if err != nil {
+
+			}
+			b.loadedBucketEntries[metadata.Version] = &entry
+			b.loadedMetadatas[metadata.Version] = metadata
+			b.maxLoadedVersion = max(b.maxLoadedVersion, metadata.Version)
+		}
+
+		if version == LatestVersion {
+			version = b.maxLoadedVersion
+		}
+
+		// First implem : for now take all layers
+		firstVersion := FirstLayerVersion
+		iterator := func(yield func(error, *Layer) bool) {
+			for v := firstVersion; v <= version; v++ {
+				var ok bool
+				var l *Layer
+				if l, ok = b.loadedLayers[v]; !ok {
+					// Layer not already loaded
+					bucketEntry, ok := b.loadedBucketEntries[v]
+					if !ok {
+						panic(fmt.Sprintf("bucketEntry v%d not loaded", v))
 					}
+					// data, err := files.LoadBlocPart((*filez.BlocPart)(&(*bucketEntry).Val().LayerRef))
+					data, err := loadLayerData(&(*bucketEntry).Val().LayerRef)
+					if err != nil {
+						if !yield(err, nil) {
+							break
+						}
+					}
+					metadata := b.loadedMetadatas[v]
+					l = &Layer{
+						Metadata: metadata,
+						Content:  data,
+						State:    (*bucketEntry).State(),
+					}
+					b.loadedLayers[metadata.Version] = l
 				}
-				metadata := b.loadedMetadatas[v]
-				l = &Layer{
-					Metadata: metadata,
-					Content:  data,
-					State:    (*bucketEntry).State(),
-				}
-				b.loadedLayers[metadata.Version] = l
-			}
 
-			if !yield(nil, l) {
-				break
+				if !yield(nil, l) {
+					break
+				}
 			}
 		}
-	}, nil
+		iterators = append(iterators, iterator)
+	}
+
+	panic("not implemented yet")
+	iterator := func(yield func(error, *Layer) bool) {
+		// TODO: Merge iterators ordering lay by version & time
+		// Need to mark conflicts if two layers with same version
+	}
+	return iterator, nil
 }
 
 func storeHeader(dir, partition string, h *Header) (*HeaderRef, error) {
@@ -681,22 +747,41 @@ func forgeIndexesDir(dir, partition string) (string, string, string, error) {
 	return bucketIdxDir, headerRefIdxDir, bucketRefIdxDir, nil
 }
 
+func getBucketNameIndex(dir, salt, partition string) (BucketNameIndex, error) {
+	bucketIdxDir, _, _, err := forgeIndexesDir(dir, partition)
+	if err != nil {
+		return nil, err
+	}
+	return newBucketNameIndex(bucketIdxDir, "")
+}
+
+func getHeaderRefIndex(dir, salt, partition string) (HeaderRefIndex, error) {
+	_, headerRefIdxDir, _, err := forgeIndexesDir(dir, partition)
+	if err != nil {
+		return nil, err
+	}
+	return newHeaderRefIndex(headerRefIdxDir, "", salt)
+}
+
+func getBucketRefIndex(dir, salt, partition string) (BucketRefIndex, error) {
+	_, _, bucketRefIdxDir, err := forgeIndexesDir(dir, partition)
+	if err != nil {
+		return nil, err
+	}
+	return newBucketRefIndex(bucketRefIdxDir, "", salt)
+}
+
 func getServiceIndexes(dir, salt, partition string) (BucketNameIndex,
 	HeaderRefIndex, BucketRefIndex, error) {
-	bucketIdxDir, headerRefIdxDir, bucketRefIdxDir, err := forgeIndexesDir(dir, partition)
+	bucketNameIdx, err := getBucketNameIndex(dir, salt, partition)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	bucketNameIdx, err := newBucketNameIndex(bucketIdxDir, "")
+	headerRefIdx, err := getHeaderRefIndex(dir, salt, partition)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	headerRefIdx, err := newHeaderRefIndex(headerRefIdxDir, "", salt)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	bucketRefIdx, err := newBucketRefIndex(bucketRefIdxDir, "", salt)
+	bucketRefIdx, err := getBucketRefIndex(dir, salt, partition)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -705,6 +790,31 @@ func getServiceIndexes(dir, salt, partition string) (BucketNameIndex,
 }
 
 func scanServicePartitions(dir string) ([]string, error) {
+	// FIXME put a preferenced partition first
 	dirs, err := filepath.Glob(filepath.Join(dir, "*"))
+	sort.Strings(dirs)
 	return dirs, err
+}
+
+func getLastBucketHeader(paginer idx.Paginer[BucketUid, *HeaderRef]) (*Header, error) {
+	var lastHeader *Header
+	// FIXME: MUST use all HashedBucketUid !
+	for entry := range paginer.All() {
+		if entry.Error() != nil {
+			return nil, entry.Error()
+		}
+		var err error
+		lastHeader, err = loadHeader(entry.Val())
+		if err != nil {
+			return nil, err
+		}
+		// Keep only last bucket header found
+		break
+	}
+
+	if lastHeader == nil {
+		return nil, ErrNotExist
+	}
+
+	return lastHeader, nil
 }
