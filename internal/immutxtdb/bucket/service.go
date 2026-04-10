@@ -1,6 +1,7 @@
 package bucket
 
 import (
+	"cmp"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/mxbossard/utilz/filez"
+	"github.com/mxbossard/utilz/iterz"
 )
 
 const (
@@ -421,6 +423,10 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 			lastHeaderAllParts = lastHeader
 		}
 	}
+	if lastHeaderAllParts == nil {
+		return nil, ErrNotExist
+		// return nil, fmt.Errorf("no header found for bucket: %x", uid)
+	}
 
 	return s.buildLazyBucket(lastHeaderAllParts)
 }
@@ -431,6 +437,7 @@ func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageC
 		return nil, err
 	}
 
+	var paginers []iter.Seq[idx.Entry[BucketUid, *Bucket]]
 	for _, partition := range existingParts {
 		headerRefIdx, err := getHeaderRefIndex(s.dir, s.salt, partition)
 		if err != nil {
@@ -447,7 +454,6 @@ func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageC
 			return nil, err
 		}
 
-		var paginers []idx.Paginer[BucketUid, *Bucket]
 		builtBuckets := make(map[BucketUid]*Bucket)
 		// 2- Return an iterator building a bucket for each header
 		paginer := idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
@@ -481,13 +487,20 @@ func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageC
 				}
 			}
 		})
-		paginers = append(paginers, paginer)
+		paginers = append(paginers, paginer.All())
 	}
 
-	panic("not implemented yet")
-	paginer := idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
-		// TODO: Merge paginers
+	compare := func(a, b idx.Entry[BucketUid, *Bucket]) int {
 		// Ordered by time & partition
+		return cmp.Compare(a.Val().Metadata.Updated.UnixMilli(), b.Val().Metadata.Updated.UnixMilli())
+	}
+	iterator := iterz.Merge(compare, paginers...)
+	paginer := idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
+		for i := range iterator {
+			if !push(i) {
+				return
+			}
+		}
 	})
 
 	return paginer, nil
@@ -531,6 +544,7 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 		return nil, err
 	}
 
+	var iterators []iter.Seq2[error, *Layer]
 	for _, partition := range existingParts {
 		bucketRefIdx, err := getBucketRefIndex(s.dir, s.salt, partition)
 		if err != nil {
@@ -547,7 +561,6 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 			return nil, err
 		}
 
-		var iterators []iter.Seq2[error, *Layer]
 		// Eagerly load all Layer metadatas
 		for entry := range bucketPgnr.All() {
 			if entry.Error() != nil {
@@ -602,11 +615,10 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 		iterators = append(iterators, iterator)
 	}
 
-	panic("not implemented yet")
-	iterator := func(yield func(error, *Layer) bool) {
-		// TODO: Merge iterators ordering lay by version & time
-		// Need to mark conflicts if two layers with same version
+	compare := func(errA, errB error, lA, lB *Layer) int {
+		return cmp.Compare(lA.Metadata.Version, lB.Metadata.Version)
 	}
+	iterator := iterz.Merge2(compare, iterators...)
 	return iterator, nil
 }
 

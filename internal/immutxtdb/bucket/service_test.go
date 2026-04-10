@@ -385,6 +385,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 
 	require.True(t, len(bkt1Layers) >= 1)
 	// assert.Equal(t, []byte(expectedMsg2), bkt1Layers[0].Content)
+	require.NotNil(t, bkt1Layers[0].Metadata)
 	assert.Equal(t, Version(1), bkt1Layers[0].Metadata.Version)
 	assert.Equal(t, len(expectedMsg1), bkt1Layers[0].Metadata.Size)
 	require.NotNil(t, bkt1Layers[0].Metadata.Updated)
@@ -393,6 +394,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 
 	require.True(t, len(bkt1Layers) >= 2)
 	// assert.Equal(t, []byte(expectedMsg1), bkt1Layers[1].Content)
+	require.NotNil(t, bkt1Layers[1].Metadata)
 	assert.Equal(t, Version(2), bkt1Layers[1].Metadata.Version)
 	assert.Equal(t, len(expectedMsg2), bkt1Layers[1].Metadata.Size)
 	require.NotNil(t, bkt1Layers[1].Metadata.Updated)
