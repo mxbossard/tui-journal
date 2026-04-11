@@ -84,6 +84,11 @@ type BucketRef struct {
 	LayerRef    LayerRef
 }
 
+type PartedVersion struct {
+	Version Version
+	Part    string
+}
+
 type Bucket struct {
 	*sync.Mutex
 	service Service
@@ -93,11 +98,12 @@ type Bucket struct {
 	// Last layer Metadata
 	Metadata *Metadata
 
+	lastBucketRefSeq    map[string]int
 	maxLoadedVersion    Version
 	layerIt             iter.Seq2[error, *Layer]
-	loadedBucketEntries map[Version]*idx.Entry[BucketUid, *BucketRef]
-	loadedMetadatas     map[Version]*Metadata
-	loadedLayers        map[Version]*Layer
+	loadedBucketEntries map[PartedVersion]*idx.Entry[BucketUid, *BucketRef]
+	loadedMetadatas     map[PartedVersion]*Metadata
+	loadedLayers        map[PartedVersion]*Layer
 
 	data       []byte
 	stringData string
@@ -108,9 +114,10 @@ func newBucket(s Service) *Bucket {
 	b := Bucket{
 		Mutex:               &sync.Mutex{},
 		service:             s,
-		loadedBucketEntries: make(map[Version]*idx.Entry[BucketUid, *BucketRef]),
-		loadedMetadatas:     make(map[Version]*Metadata),
-		loadedLayers:        make(map[Version]*Layer),
+		lastBucketRefSeq:    make(map[string]int),
+		loadedBucketEntries: make(map[PartedVersion]*idx.Entry[BucketUid, *BucketRef]),
+		loadedMetadatas:     make(map[PartedVersion]*Metadata),
+		loadedLayers:        make(map[PartedVersion]*Layer),
 	}
 
 	return &b

@@ -8,6 +8,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
+	"github.com/mxbossard/utilz/collectionz"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/iterz"
 )
@@ -196,9 +198,9 @@ func (s *bucketService) create(b *Bucket, partition string) error {
 	b.Metadata = &metadata
 	// b.lastHashedUid = hashedUid
 	b.maxLoadedVersion = metadata.Version
-	b.loadedBucketEntries[metadata.Version] = &brEntry
-	b.loadedMetadatas[metadata.Version] = &metadata
-	b.loadedLayers[metadata.Version] = &l
+	b.loadedBucketEntries[PartedVersion{metadata.Version, partition}] = &brEntry
+	b.loadedMetadatas[PartedVersion{metadata.Version, partition}] = &metadata
+	b.loadedLayers[PartedVersion{metadata.Version, partition}] = &l
 
 	return nil
 }
@@ -327,9 +329,9 @@ func (s *bucketService) update(b *Bucket, partition string) error {
 
 	// panic("not implemented yet")
 	b.maxLoadedVersion = newMetadata.Version
-	b.loadedBucketEntries[newMetadata.Version] = &brEntry
-	b.loadedMetadatas[newMetadata.Version] = newMetadata
-	b.loadedLayers[newMetadata.Version] = &l
+	b.loadedBucketEntries[PartedVersion{newMetadata.Version, partition}] = &brEntry
+	b.loadedMetadatas[PartedVersion{newMetadata.Version, partition}] = newMetadata
+	b.loadedLayers[PartedVersion{newMetadata.Version, partition}] = &l
 	b.Header.changed = false
 	b.Metadata = newMetadata
 	return nil
@@ -363,7 +365,7 @@ func (s *bucketService) buildLazyBucket(lastHeader *Header) (*Bucket, error) {
 		// 2- List all bucketRefs
 		// FIXME: which uid key ?
 		// FIXME: use state filter to stop on first root state ?
-		fmt.Printf("buildLazyBucket, bUid: %v\n", lastHeader.Uid)
+		// fmt.Printf("buildLazyBucket, bUid: %v\n", lastHeader.Uid)
 		bucketPgnr, err := bucketRefIdx.HashedPaginate(lastHeader.Uid, idx.BottomToTop)
 		if err != nil {
 			return nil, err
@@ -401,7 +403,7 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 		return nil, err
 	}
 
-	fmt.Printf("partitions to scan: %s\n", existingParts)
+	// fmt.Printf("partitions to scan: %s\n", existingParts)
 	var lastHeaderAllParts *Header
 	for _, partition := range existingParts {
 		// TODO: get last header for all parts
@@ -420,7 +422,7 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 		if err != nil && err != ErrNotExist {
 			return nil, err
 		}
-		fmt.Printf("found lastHeader for part: %s => %v\n", partition, lastHeader)
+		// fmt.Printf("found lastHeader for part: %s => %v\n", partition, lastHeader)
 		if lastHeaderAllParts == nil || lastHeaderAllParts.Modified != nil && lastHeader.Modified != nil &&
 			lastHeaderAllParts.Modified.Before(*lastHeader.Modified) {
 			lastHeaderAllParts = lastHeader
@@ -547,7 +549,7 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 		return nil, err
 	}
 
-	var iterators []iter.Seq2[error, *Layer]
+	// var iterators []iter.Seq2[error, *Layer]
 	for _, partition := range existingParts {
 		bucketRefIdx, err := getBucketRefIndex(s.dir, s.salt, partition)
 		if err != nil {
@@ -559,7 +561,18 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 		// Need to iterate over all layers metadata
 		// Load content only if necessary
 
-		bucketPgnr, err := bucketRefIdx.HashedPaginate(b.Header.Uid, idx.BottomToTop)
+		var f idx.Filter
+		if lastSeq, ok := b.lastBucketRefSeq[partition]; ok {
+			// Search for new bucketRef
+			f = idx.AfterSeqFilter(lastSeq)
+			// fmt.Printf("will scan all bucketRef after seq: %d\n", lastSeq)
+		} else {
+			// Search for all bucketRef
+			f = idx.AfterSeqFilter(-1)
+			// fmt.Printf("will scan all bucketRefs\n")
+		}
+
+		bucketPgnr, err := bucketRefIdx.HashedFilter(b.Header.Uid, idx.BottomToTop, f)
 		if err != nil {
 			return nil, err
 		}
@@ -569,60 +582,83 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 			if entry.Error() != nil {
 				return nil, fmt.Errorf("error iterating bucketRefIdx: %w", entry.Error())
 			}
+
 			metadata, err := loadMetadata(&entry.Val().MetadataRef)
 			if err != nil {
-
+				return nil, err
 			}
-			b.loadedBucketEntries[metadata.Version] = &entry
-			b.loadedMetadatas[metadata.Version] = metadata
+
+			pv := PartedVersion{metadata.Version, partition}
+			b.loadedBucketEntries[pv] = &entry
+			b.loadedMetadatas[pv] = metadata
 			b.maxLoadedVersion = max(b.maxLoadedVersion, metadata.Version)
+			// fmt.Printf("loaded layer #%v metadata (seq: %d) maxLoadedVersion:%d\n", pv, entry.Seq(), b.maxLoadedVersion)
+			b.lastBucketRefSeq[partition] = entry.Seq()
 		}
+	}
 
-		if version == LatestVersion {
-			version = b.maxLoadedVersion
-		}
+	if version == LatestVersion {
+		version = b.maxLoadedVersion
+	}
 
-		// First implem : for now take all layers
-		firstVersion := FirstLayerVersion
-		iterator := func(yield func(error, *Layer) bool) {
-			for v := firstVersion; v <= version; v++ {
-				var ok bool
-				var l *Layer
-				if l, ok = b.loadedLayers[v]; !ok {
-					// Layer not already loaded
-					bucketEntry, ok := b.loadedBucketEntries[v]
-					if !ok {
-						panic(fmt.Sprintf("bucketEntry v%d not loaded", v))
-					}
-					// data, err := files.LoadBlocPart((*filez.BlocPart)(&(*bucketEntry).Val().LayerRef))
-					data, err := loadLayerData(&(*bucketEntry).Val().LayerRef)
-					if err != nil {
-						if !yield(err, nil) {
-							break
-						}
-					}
-					metadata := b.loadedMetadatas[v]
-					l = &Layer{
-						Metadata: metadata,
-						Content:  data,
-						State:    (*bucketEntry).State(),
-					}
-					b.loadedLayers[metadata.Version] = l
+	if version > b.maxLoadedVersion {
+		// Asked for a version which do not exists.
+		return nil, ErrNotExist
+	}
+
+	iterator := func(yield func(error, *Layer) bool) {
+		layerVersions := collectionz.Keys(b.loadedBucketEntries)
+		slices.SortFunc(layerVersions, func(a, b PartedVersion) int {
+			if a.Version < b.Version {
+				return -1
+			} else if a.Version == b.Version {
+				return 0
+			}
+			return 1
+		})
+		for _, pv := range layerVersions {
+			if pv.Version > version {
+				// Stop iterating when catched up supplied version
+				break
+			}
+			var ok bool
+			var l *Layer
+			if l, ok = b.loadedLayers[pv]; !ok {
+				// Layer not already loaded
+
+				bucketEntry, ok := b.loadedBucketEntries[pv]
+				if !ok {
+					// If bucket entry not loaded it does not exists for this partition
+					// => skip it
+					// FIXME: for now scan all version for each partition in b.loadedLayers map
+					continue
+					// panic(fmt.Sprintf("bucketEntry v%d not loaded", v))
 				}
 
-				if !yield(nil, l) {
-					break
+				data, err := loadLayerData(&(*bucketEntry).Val().LayerRef)
+				if err != nil {
+					if !yield(err, nil) {
+						break
+					}
 				}
+				metadata := b.loadedMetadatas[pv]
+				// fmt.Printf("loaded metadata v%d: %v\n", v, metadata)
+				l = &Layer{
+					Metadata: metadata,
+					Content:  data,
+					State:    (*bucketEntry).State(),
+				}
+				// PartedVersion{metadata.Version, partition}
+				b.loadedLayers[pv] = l
+				// fmt.Printf("loaded layer #%v data\n", pv)
+			}
+
+			// fmt.Printf("yield %s layer v%d: %v\n", pv.Part, pv.Version, *l)
+			if !yield(nil, l) {
+				break
 			}
 		}
-		iterators = append(iterators, iterator)
 	}
-
-	// fmt.Printf("will merge iterators partitions: %v\n", existingParts)
-	compare := func(errA, errB error, lA, lB *Layer) int {
-		return cmp.Compare(lA.Metadata.Version, lB.Metadata.Version)
-	}
-	iterator := iterz.Merge2(compare, iterators...)
 	return iterator, nil
 }
 

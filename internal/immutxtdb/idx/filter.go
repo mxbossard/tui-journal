@@ -11,10 +11,14 @@ type timeFilter func(t time.Time) (ok bool, loop bool)
 // Return ok=true to select entry, return loop=false to stop iterating.
 type keyFilter func(k []byte, s State) (ok bool, loop bool)
 
+// Return ok=true to select entry, return loop=false to stop iterating.
+type seqFilter func(s int, o Order) (ok bool, loop bool)
+
 type Filter interface {
 	StateFilter() stateFilter
 	TimeFilter() timeFilter
 	KeyFilter() keyFilter
+	SeqFilter() seqFilter
 }
 
 type aggFilter struct {
@@ -23,6 +27,7 @@ type aggFilter struct {
 	stateFilters []stateFilter
 	timeFilters  []timeFilter
 	keyFilters   []keyFilter
+	seqFilters   []seqFilter
 }
 
 func (f *aggFilter) Add(filters ...*aggFilter) *aggFilter {
@@ -30,6 +35,7 @@ func (f *aggFilter) Add(filters ...*aggFilter) *aggFilter {
 		f.AddStateFilter(filter.StateFilter())
 		f.AddTimeFilter(filter.TimeFilter())
 		f.AddKeyFilter(filter.KeyFilter())
+		f.AddSeqFilter(filter.SeqFilter())
 	}
 	return f
 }
@@ -118,6 +124,34 @@ func (f aggFilter) KeyFilter() keyFilter {
 	}
 }
 
+func (f *aggFilter) AddSeqFilter(filter seqFilter) *aggFilter {
+	if filter != nil {
+		f.seqFilters = append(f.seqFilters, filter)
+	}
+	return f
+}
+
+func (f aggFilter) SeqFilter() seqFilter {
+	if len(f.seqFilters) == 0 {
+		return nil
+	}
+	return func(seq int, o Order) (ok bool, loop bool) {
+		ok = !f.logicalOr
+		loop = true
+		for _, filter := range f.seqFilters {
+			sok, sloop := filter(seq, o)
+			if f.logicalOr {
+				ok = ok || sok
+			} else {
+				ok = ok && sok
+			}
+			loop = loop && sloop
+
+		}
+		return
+	}
+}
+
 func AndFilter(filters ...*aggFilter) *aggFilter {
 	filter := &aggFilter{logicalOr: false}
 	filter.Add(filters...)
@@ -151,6 +185,44 @@ func BetweenFilter(a, b time.Time) *aggFilter {
 		panic("a must be before b")
 	}
 	f := AndFilter(BeforeFilter(b), AfterFilter(a))
+	return f
+}
+
+func BeforeSeqFilter(seq int) *aggFilter {
+	f := &aggFilter{}
+	f.AddSeqFilter(func(s int, o Order) (ok bool, loop bool) {
+		ok = s < seq
+		switch o {
+		case TopToBottom:
+			loop = ok
+		case BottomToTop:
+			loop = true
+		}
+		return
+	})
+	return f
+}
+
+func AfterSeqFilter(seq int) *aggFilter {
+	f := &aggFilter{}
+	f.AddSeqFilter(func(s int, o Order) (ok bool, loop bool) {
+		ok = s > seq
+		switch o {
+		case TopToBottom:
+			loop = true
+		case BottomToTop:
+			loop = ok
+		}
+		return
+	})
+	return f
+}
+
+func BetweenSeqFilter(a, b int) *aggFilter {
+	if a >= b {
+		panic("a must be before b")
+	}
+	f := AndFilter(BeforeSeqFilter(b), AfterSeqFilter(a))
 	return f
 }
 

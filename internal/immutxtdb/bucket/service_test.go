@@ -1,6 +1,7 @@
 package bucket
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -124,9 +125,9 @@ func TestBucketService_Get_Not_Existing(t *testing.T) {
 	assert.Nil(t, bkt)
 }
 
-func TestBucketService_Save_And_Get(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Save_And_Get")
-	// defer os.RemoveAll(tmpDir)
+func TestBucketService_Save_Then_Get(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpDir)
 
 	expectedPartition := "device"
 	expectedSalt := "salt"
@@ -210,6 +211,232 @@ func TestBucketService_Save_And_Get(t *testing.T) {
 
 	// Use ExportedValues comparison because of time.Time comparison not working (some private fields are not the same)
 	assert.EqualExportedValues(t, rootLayer1, rootLayer2)
+}
+
+func TestBucketService_SaveMultiParts_Then_Get(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpDir)
+
+	expectedPartition1 := "device1"
+	expectedPartition2 := "device2"
+	expectedPartition3 := "device3"
+	expectedSalt := "salt"
+	expectedName := "foo"
+	expectedMsg1 := ztring.LoremIpsumWords(5)
+	expectedMsg2 := ztring.LoremIpsumWords(15)
+	expectedMsg3 := ztring.LoremIpsumWords(10)
+	// expectedZipedMsg1, err := zip.ZipString(expectedMsg1)
+	// require.NoError(t, err)
+	// expectedZipedMsg2, err := zip.ZipString(expectedMsg2)
+	// require.NoError(t, err)
+	// expectedZipedMsg3, err := zip.ZipString(expectedMsg3)
+	// require.NoError(t, err)
+	expectedLabels := Labels{
+		"foo": "pif",
+		"bar": "paf",
+	}
+
+	svc, err := NewBucketService(tmpDir, expectedSalt)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	bkt1 := svc.New(expectedName, expectedLabels)
+	assert.NotNil(t, bkt1)
+
+	assert.Nil(t, bkt1.Metadata)
+
+	// First Save in bkt1
+	err = bkt1.WriteText(expectedMsg1)
+	assert.NoError(t, err)
+
+	assert.Nil(t, bkt1.Metadata)
+
+	before1 := time.Now()
+	err = svc.Save(bkt1, expectedPartition1)
+	assert.NoError(t, err)
+	after1 := time.Now()
+
+	assert.Equal(t, Version(1), bkt1.Metadata.Version)
+
+	// Second save in same bkt1
+	err = bkt1.WriteText(expectedMsg2)
+	assert.NoError(t, err)
+	before2 := time.Now()
+
+	assert.Equal(t, Version(1), bkt1.Metadata.Version)
+
+	err = svc.Save(bkt1, expectedPartition2)
+	assert.NoError(t, err)
+	after2 := time.Now()
+
+	// ----- Check bkt1 Metadata -----
+	assert.Equal(t, Version(2), bkt1.Metadata.Version)
+
+	// ----- Check bkt1 Layers -----
+	layerIt1, err := bkt1.LayerIt(LatestVersion)
+	assert.NoError(t, err)
+	require.NotNil(t, layerIt1)
+	k := 0
+	for err, l := range layerIt1 {
+		k++
+		assert.NoError(t, err)
+		assert.NotNil(t, l)
+		require.NotNil(t, l.Metadata)
+		assert.Equal(t, Version(k), l.Metadata.Version)
+		switch k {
+		case 1:
+			assert.Equal(t, len(expectedMsg1), l.Metadata.Size)
+			require.NotNil(t, l.Metadata.Updated)
+			assert.Less(t, before1, *l.Metadata.Updated)
+			assert.Greater(t, after1, *l.Metadata.Updated)
+			txt, err := bkt1.ProjectText(Version(k))
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg1, txt)
+		case 2:
+			assert.Equal(t, len(expectedMsg2), l.Metadata.Size)
+			require.NotNil(t, l.Metadata.Updated)
+			assert.Less(t, before2, *l.Metadata.Updated)
+			assert.Greater(t, after2, *l.Metadata.Updated)
+			txt, err := bkt1.ProjectText(Version(k))
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg2, txt)
+		default:
+			assert.Fail(t, "should have only 2 layers")
+		}
+	}
+	assert.Equal(t, 2, k)
+
+	// Third save in another bkt2
+	bkt2, err := svc.Get(bkt1.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bkt2)
+	err = bkt2.WriteText(expectedMsg3)
+	assert.NoError(t, err)
+	before3 := time.Now()
+	err = svc.Save(bkt2, expectedPartition3)
+	assert.NoError(t, err)
+	after3 := time.Now()
+
+	// ----- Check bkt2 Metadata -----
+	assert.Equal(t, Version(3), bkt2.Metadata.Version)
+
+	// ----- Check bkt2 Layers -----
+	layerIt2, err := bkt2.LayerIt(LatestVersion)
+	assert.NoError(t, err)
+	require.NotNil(t, layerIt2)
+	k = 0
+	for err, l := range layerIt2 {
+		k++
+		assert.NoError(t, err)
+		assert.NotNil(t, l)
+		require.NotNil(t, l.Metadata)
+		assert.Equal(t, Version(k), l.Metadata.Version)
+		switch k {
+		case 1:
+			assert.Equal(t, len(expectedMsg1), l.Metadata.Size)
+			require.NotNil(t, l.Metadata.Updated)
+			assert.Less(t, before1, *l.Metadata.Updated)
+			assert.Greater(t, after1, *l.Metadata.Updated)
+			txt, err := bkt2.ProjectText(Version(k))
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg1, txt)
+		case 2:
+			assert.Equal(t, len(expectedMsg2), l.Metadata.Size)
+			require.NotNil(t, l.Metadata.Updated)
+			assert.Less(t, before2, *l.Metadata.Updated)
+			assert.Greater(t, after2, *l.Metadata.Updated)
+			txt, err := bkt2.ProjectText(Version(k))
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg2, txt)
+		case 3:
+			assert.Equal(t, len(expectedMsg3), l.Metadata.Size)
+			require.NotNil(t, l.Metadata.Updated)
+			assert.Less(t, before3, *l.Metadata.Updated)
+			assert.Greater(t, after3, *l.Metadata.Updated)
+			txt, err := bkt2.ProjectText(Version(k))
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg3, txt)
+		default:
+			assert.Fail(t, "should have only 3 layers")
+		}
+	}
+	assert.Equal(t, 3, k)
+
+	// Check retrieval of a third bkt3
+	bkt3, err := svc.Get(bkt1.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bkt3)
+
+	// Check Header
+	require.NotNil(t, bkt3.Header)
+	// Use ExportedValues comparison because of time.Time comparison not working (some private fields are not the same)
+	assert.EqualExportedValues(t, bkt1.Header, bkt3.Header)
+	assert.Equal(t, expectedName, bkt3.Header.Name)
+	assert.Equal(t, expectedLabels, bkt3.Header.Labels)
+
+	// Check Metadata
+	require.NotNil(t, bkt3.Metadata)
+	// Use ExportedValues comparison because of time.Time comparison not working (some private fields are not the same)
+	assert.Equal(t, len(expectedMsg3), bkt3.Metadata.Size)
+	require.NotNil(t, bkt3.Metadata.Updated)
+	assert.Less(t, before3, *bkt3.Metadata.Updated)
+	assert.Greater(t, after3, *bkt3.Metadata.Updated)
+	assert.Equal(t, Version(3), bkt3.Metadata.Version)
+
+	// ----- Check bkt3 Metadata -----
+	assert.Equal(t, Version(3), bkt3.Metadata.Version)
+
+	// ----- Check bkt3 Layers -----
+	fmt.Printf("----- get bkt3 iterator -----\n")
+	layerIt3, err := bkt3.LayerIt(LatestVersion)
+	assert.NoError(t, err)
+	require.NotNil(t, layerIt3)
+	fmt.Printf("----- iterate over bkt3 iterator -----\n")
+	k = 0
+	for err, l := range layerIt3 {
+		k++
+		fmt.Printf("----- testing layer #%d -----\n", k)
+		assert.NoError(t, err)
+		assert.NotNil(t, l)
+		require.NotNil(t, l.Metadata)
+		assert.Equal(t, Version(k), l.Metadata.Version)
+		switch k {
+		case 1:
+			assert.Equal(t, len(expectedMsg1), l.Metadata.Size)
+			require.NotNil(t, l.Metadata.Updated)
+			assert.Less(t, before1, *l.Metadata.Updated)
+			assert.Greater(t, after1, *l.Metadata.Updated)
+			txt, err := bkt3.ProjectText(Version(k))
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg1, txt)
+		case 2:
+			assert.Equal(t, len(expectedMsg2), l.Metadata.Size)
+			require.NotNil(t, l.Metadata.Updated)
+			assert.Less(t, before2, *l.Metadata.Updated)
+			assert.Greater(t, after2, *l.Metadata.Updated)
+			txt, err := bkt3.ProjectText(Version(k))
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg2, txt)
+		case 3:
+			assert.Equal(t, len(expectedMsg3), l.Metadata.Size)
+			require.NotNil(t, l.Metadata.Updated)
+			assert.Less(t, before3, *l.Metadata.Updated)
+			assert.Greater(t, after3, *l.Metadata.Updated)
+			txt, err := bkt3.ProjectText(Version(k))
+			assert.NoError(t, err)
+			assert.Equal(t, expectedMsg3, txt)
+		default:
+			assert.Fail(t, "should have only 3 layers")
+		}
+	}
+	assert.Equal(t, 3, k, "bad count of layers loaded")
+
+	fmt.Printf("----- iterate over bkt3 ended -----\n")
+
+	// Not existing version
+	layerIt4, err := bkt3.LayerIt(Version(10))
+	assert.Equal(t, ErrNotExist, err)
+	assert.Nil(t, layerIt4)
 }
 
 func TestBucketService_Names(t *testing.T) {

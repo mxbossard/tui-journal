@@ -287,6 +287,15 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 							}
 							loop = loop && iloop
 						}
+						seqf := f.SeqFilter()
+						if seqf != nil {
+							// If SeqFilter does not match ignore the entry
+							ok, iloop := seqf(seq, order)
+							if !ok {
+								return true
+							}
+							loop = loop && iloop
+						}
 					}
 
 					if keyFiltering {
