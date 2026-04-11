@@ -20,6 +20,8 @@ import (
 )
 
 const (
+	bucketIdxDir = "bucketIndexes"
+
 	BucketNameIdxStateSize = 8
 	BucketNameIdxKeySize   = 64
 	BucketNameIdxDataSize  = 16
@@ -399,10 +401,10 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 		return nil, err
 	}
 
+	fmt.Printf("partitions to scan: %s\n", existingParts)
 	var lastHeaderAllParts *Header
 	for _, partition := range existingParts {
 		// TODO: get last header for all parts
-
 		headerRefIdx, err := getHeaderRefIndex(s.dir, s.salt, partition)
 		if err != nil {
 			return nil, err
@@ -415,9 +417,10 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 		}
 
 		lastHeader, err := getLastBucketHeader(headerPgnr)
-		if err != nil {
+		if err != nil && err != ErrNotExist {
 			return nil, err
 		}
+		fmt.Printf("found lastHeader for part: %s => %v\n", partition, lastHeader)
 		if lastHeaderAllParts == nil || lastHeaderAllParts.Modified != nil && lastHeader.Modified != nil &&
 			lastHeaderAllParts.Modified.Before(*lastHeader.Modified) {
 			lastHeaderAllParts = lastHeader
@@ -615,6 +618,7 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 		iterators = append(iterators, iterator)
 	}
 
+	// fmt.Printf("will merge iterators partitions: %v\n", existingParts)
 	compare := func(errA, errB error, lA, lB *Layer) int {
 		return cmp.Compare(lA.Metadata.Version, lB.Metadata.Version)
 	}
@@ -630,7 +634,7 @@ func storeHeader(dir, partition string, h *Header) (*HeaderRef, error) {
 		return nil, err
 	}
 
-	virtualBloc, err := files.StoreBlocData(dir, partition, "bucketHeader", data[:n])
+	virtualBloc, err := files.StoreBlocData(dir, partition, "bucketHeaderStore", data[:n])
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +655,7 @@ func storeMetadata(dir, partition string, m *Metadata) (*MetadataRef, error) {
 		return nil, err
 	}
 
-	virtualBloc, err := files.StoreBlocData(dir, partition, "layerMetadata", data[:n])
+	virtualBloc, err := files.StoreBlocData(dir, partition, "layerMetadataStore", data[:n])
 	if err != nil {
 		return nil, err
 	}
@@ -665,7 +669,7 @@ func storeMetadata(dir, partition string, m *Metadata) (*MetadataRef, error) {
 }
 
 func storeLayerData(dir, partition string, data []byte) (*LayerRef, error) {
-	virtualBloc, err := files.StoreBlocData(dir, partition, "layerData", data)
+	virtualBloc, err := files.StoreBlocData(dir, partition, "layerDataStore", data)
 	if err != nil {
 		return nil, err
 	}
@@ -737,11 +741,11 @@ func generateRandUid() BucketUid {
 }
 
 func forgeIndexesDir(dir, partition string) (string, string, string, error) {
-	bucketIdxDir := filepath.Join(dir, partition, "bucketIdx")
-	headerRefIdxDir := filepath.Join(dir, partition, "headerRefIdx")
-	bucketRefIdxDir := filepath.Join(dir, partition, "bucketRefIdx")
+	bucketNameIdxDir := filepath.Join(dir, bucketIdxDir, partition, "bucketNameIdx")
+	headerRefIdxDir := filepath.Join(dir, bucketIdxDir, partition, "headerRefIdx")
+	bucketRefIdxDir := filepath.Join(dir, bucketIdxDir, partition, "bucketRefIdx")
 
-	err := os.MkdirAll(bucketIdxDir, 0700)
+	err := os.MkdirAll(bucketNameIdxDir, 0700)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -756,7 +760,7 @@ func forgeIndexesDir(dir, partition string) (string, string, string, error) {
 		return "", "", "", err
 	}
 
-	return bucketIdxDir, headerRefIdxDir, bucketRefIdxDir, nil
+	return bucketNameIdxDir, headerRefIdxDir, bucketRefIdxDir, nil
 }
 
 func getBucketNameIndex(dir, salt, partition string) (BucketNameIndex, error) {
@@ -803,9 +807,13 @@ func getServiceIndexes(dir, salt, partition string) (BucketNameIndex,
 
 func scanServicePartitions(dir string) ([]string, error) {
 	// FIXME put a preferenced partition first
-	dirs, err := filepath.Glob(filepath.Join(dir, "*"))
-	sort.Strings(dirs)
-	return dirs, err
+	dirs, err := filepath.Glob(filepath.Join(dir, bucketIdxDir, "*"))
+	var names []string
+	for _, dir := range dirs {
+		names = append(names, filepath.Base(dir))
+	}
+	sort.Strings(names)
+	return names, err
 }
 
 func getLastBucketHeader(paginer idx.Paginer[BucketUid, *HeaderRef]) (*Header, error) {

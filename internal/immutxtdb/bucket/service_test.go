@@ -101,6 +101,7 @@ func TestBucketService_Save(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, l)
 		assert.Equal(t, expectedZipedMsg, l.Content)
+		assert.Equalf(t, Version(k), l.Metadata.Version, "bad layer #%d version", k)
 	}
 	assert.Equal(t, 1, k)
 
@@ -125,7 +126,7 @@ func TestBucketService_Get_Not_Existing(t *testing.T) {
 
 func TestBucketService_Save_And_Get(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBucketService_Save_And_Get")
-	defer os.RemoveAll(tmpDir)
+	// defer os.RemoveAll(tmpDir)
 
 	expectedPartition := "device"
 	expectedSalt := "salt"
