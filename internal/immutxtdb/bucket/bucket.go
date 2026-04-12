@@ -35,7 +35,7 @@ type Labels map[string]string
 
 func NewLabels(labels ...string) Labels {
 	l := make(Labels)
-	for k := 0; k <= len(labels); k += 2 {
+	for k := 0; k < len(labels); k += 2 {
 		key := labels[k]
 		if len(labels) < k+2 {
 			panic(fmt.Sprintf("missing label value for key: %s", key))

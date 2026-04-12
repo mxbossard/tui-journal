@@ -6,7 +6,9 @@ import (
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/bucket"
 	"github.com/mxbossard/utilz/filez"
+	"github.com/mxbossard/utilz/ztring"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStore_NewTwoPhasesStore(t *testing.T) {
@@ -44,8 +46,13 @@ func TestStore_Save(t *testing.T) {
 
 	expectedName := "b1"
 	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedTxt := ztring.LoremIpsumWords(5)
+
 	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
+
+	err = b.WriteText(expectedTxt)
+	assert.NoError(t, err)
 
 	err = s.Save(b)
 	assert.NoError(t, err)
@@ -82,8 +89,12 @@ func TestStore_Get(t *testing.T) {
 
 	expectedName := "b1"
 	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedTxt := ztring.LoremIpsumWords(5)
+
 	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
+	err = b.WriteText(expectedTxt)
+	assert.NoError(t, err)
 
 	// Get after Save
 	err = s.Save(b)
@@ -96,7 +107,8 @@ func TestStore_Get(t *testing.T) {
 
 	b1, err := s2.Get(b.Header.Uid)
 	assert.NoError(t, err)
-	assert.NotNil(t, b1)
+	require.NotNil(t, b1)
+	require.NotNil(t, b1.Header)
 	assert.Equal(t, expectedName, b1.Header.Name)
 
 	// Use a third service
