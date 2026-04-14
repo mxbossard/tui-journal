@@ -67,6 +67,10 @@ type Service interface {
 	Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
 	// Save a Bucket
 	Save(b *Bucket, partition string) error
+	// Export all layers of a bucket
+	Export(uid BucketUid, squash bool) (*BucketExport, error)
+	// Import an Exported Bucket in the service
+	Import(export *BucketExport) error
 
 	buildLayerIt(b *Bucket, v Version) (iter.Seq2[error, *Layer], error)
 }

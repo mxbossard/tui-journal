@@ -9,10 +9,11 @@
 - [x] Add Bucket.Layers(version)
 - [x] Add Bucket.Project(version)
 - [x] Keep state of last version loaded in case of successive loading ?
-- [_] Add Service.Snapshot()
+- [_] Add idx export / import unittests (especially with hashed keys)
+- [_] Add Bucket Service Export / Import (without squashing for now)
+- [_] Implem Two Phases store
+- [_] Add Store / Service Snapshot() HOW ?
 - [x] Idx Concatenation
-- [_] Multi device, How ? Use cases ?
-- [_] Temp indexes, How ? Use cases ?
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
 - [x] Implement RotatingHash, who's responsability ?
