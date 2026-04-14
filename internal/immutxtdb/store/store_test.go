@@ -12,19 +12,23 @@ import (
 )
 
 func TestStore_NewTwoPhasesStore(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic(t.Name())
-	defer os.RemoveAll(tmpDir)
+	tmpEDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
 
-	s, err := NewTwoPhasesStore(tmpDir, "salt")
+	s, err := NewTwoPhasesStore(tmpEDir, tmpRDir, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s)
 }
 
 func TestStore_NewBucket(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic(t.Name())
-	defer os.RemoveAll(tmpDir)
+	tmpEDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
 
-	s, err := NewTwoPhasesStore(tmpDir, "salt")
+	s, err := NewTwoPhasesStore(tmpEDir, tmpRDir, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s)
 
@@ -37,10 +41,12 @@ func TestStore_NewBucket(t *testing.T) {
 }
 
 func TestStore_Save(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic(t.Name())
-	defer os.RemoveAll(tmpDir)
+	tmpEDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
 
-	s, err := NewTwoPhasesStore(tmpDir, "salt")
+	s, err := NewTwoPhasesStore(tmpEDir, tmpRDir, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s)
 
@@ -78,12 +84,13 @@ func TestStore_Names(t *testing.T) {
 }
 
 func TestStore_Get(t *testing.T) {
-	//TODO
-	tmpDir := filez.MkdirTempOrPanic(t.Name())
-	defer os.RemoveAll(tmpDir)
+	tmpEDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
 
 	// Use a first service
-	s, err := NewTwoPhasesStore(tmpDir, "salt")
+	s, err := NewTwoPhasesStore(tmpEDir, tmpRDir, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s)
 
@@ -101,7 +108,7 @@ func TestStore_Get(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Use a second service
-	s2, err := NewTwoPhasesStore(tmpDir, "salt")
+	s2, err := NewTwoPhasesStore(tmpEDir, tmpRDir, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s2)
 
@@ -112,7 +119,7 @@ func TestStore_Get(t *testing.T) {
 	assert.Equal(t, expectedName, b1.Header.Name)
 
 	// Use a third service
-	s3, err := NewTwoPhasesStore(tmpDir, "salt")
+	s3, err := NewTwoPhasesStore(tmpEDir, tmpRDir, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s3)
 
@@ -121,7 +128,7 @@ func TestStore_Get(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Use a fourth service
-	s4, err := NewTwoPhasesStore(tmpDir, "salt")
+	s4, err := NewTwoPhasesStore(tmpEDir, tmpRDir, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s4)
 

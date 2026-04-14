@@ -20,19 +20,15 @@ type TwoPhasesStore struct {
 	namesCache map[string]bucket.BucketUid
 }
 
-func NewTwoPhasesStore(dir, salt string) (*TwoPhasesStore, error) {
-	// Multiple partitions SHOULD be managed by bucket service ?
-	// Or do I manage one service by partition ?
-	// For ephemeral bucket I may need one partition by bucket so one service by bucket ?
-	// Supply partition for writes operation (New(), Save(), Commit())
-	// Add a bucket.NewPartedBucketService ?
-	// Update Service to manage multiple partitions ?
-	// FIXME ephemeral store should be stored in home local cache dir ?
-	eStore, err := bucket.NewBucketService(filepath.Join(dir, "ephemeral"), salt)
+func NewTwoPhasesStore(ephemeralDir, restedDir, salt string) (*TwoPhasesStore, error) {
+	// Multiple partitions are supported by bucket service ?
+	// For ephemeral bucket I may need one partition by bucket ?
+	// Supply partition for writes operation (Save(), Commit())
+	eStore, err := bucket.NewBucketService(filepath.Join(ephemeralDir, "ephemeral"), salt)
 	if err != nil {
 		return nil, err
 	}
-	rStore, err := bucket.NewBucketService(filepath.Join(dir, "rested"), salt)
+	rStore, err := bucket.NewBucketService(filepath.Join(restedDir, "rested"), salt)
 	if err != nil {
 		return nil, err
 	}
@@ -69,16 +65,28 @@ func (s TwoPhasesStore) Commit(b *bucket.Bucket, squash bool) error {
 	// Service COULD implements an Export() / Import() pair of methods to :
 	// - duplicate a bucket with exactly same data
 	// - duplicate a bucket with some layers squashed
+	// - duplicate a bucket removing hidden data
 	// - compact buckets data in minimum count of blocs
+	// => Export(BucketUid, includeHidden, squash, squashAll) ExportedBucket
+	// - Do we need to implements 2 squash ?
+	// - includeHidden & squashAll seems mutually exclusive
+	// - squash would merge as many a possible layers
+	// - squashAll would produce only one layer (keep only last snapshot)
+
+	// Service Export could leverage an Idx Export supporting :
+	// - Export of hidden or not entries (if hide feature is implemented in Idx)
+	// - Entry merging ? Based on what ? Is this not of idx user responsibility ?
+	// - Could supply a merging func(e1, e2 Entry) (Entry, error)
+	// - Compaction would be implemented by design, all entries would be inserted contiguously.
+	// => No interest implementing export in Idx. Export can easily be done in another pkg.
 
 	// How to erase data from ephemeral store ?
 	// Idea 1: each ephemeral bucket could be created in a separate partition based on bucket name. Drawbacks: could not have 2 ephemeral buckets with same name.
+	// Idea 1b: each ephemeral bucket could be created in a separate partition based on bucket UID. Drawbacks: none.
 	// Idea 2: Use idx.Hide considering all ephemeral hidden entries not existing. Drawbacks: how to clean ephemeral store ?
 	// Idea 3: Use a bucket.Service not based on blocs files but on rewritable files ?
 
-	// If squashing HOW TO rewrite layers in ephemeral store ?
-	// Do we want to erase Bucket from ephemeral store ?
-	// We could use a dedicated bloc file by Bucket in ephemeral store ?
+	// Do we want to erase Bucket from ephemeral store => yes we delete the bucket dedicated partition.
 
 	panic("not implemented yet")
 }
