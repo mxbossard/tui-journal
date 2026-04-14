@@ -10,8 +10,8 @@
 - [x] Add Bucket.Project(version)
 - [x] Keep state of last version loaded in case of successive loading ?
 - [_] Add idx export / import unittests (especially with hashed keys)
-- [_] Add Bucket Service Export / Import (without squashing for now)
-- [_] Implem Two Phases store
+- [x] Add Bucket Service Export / Import (without squashing for now)
+- [_] Implem Two Phases store first version
 - [_] Add Store / Service Snapshot() HOW ?
 - [x] Idx Concatenation
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)

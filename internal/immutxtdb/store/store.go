@@ -17,10 +17,12 @@ type TwoPhasesStore struct {
 	ephemeral bucket.Service
 	rested    bucket.Service
 
+	writePartition string
+
 	namesCache map[string]bucket.BucketUid
 }
 
-func NewTwoPhasesStore(ephemeralDir, restedDir, salt string) (*TwoPhasesStore, error) {
+func NewTwoPhasesStore(ephemeralDir, restedDir, partition, salt string) (*TwoPhasesStore, error) {
 	// Multiple partitions are supported by bucket service ?
 	// For ephemeral bucket I may need one partition by bucket ?
 	// Supply partition for writes operation (Save(), Commit())
@@ -33,9 +35,10 @@ func NewTwoPhasesStore(ephemeralDir, restedDir, salt string) (*TwoPhasesStore, e
 		return nil, err
 	}
 	s := &TwoPhasesStore{
-		ephemeral:  eStore,
-		rested:     rStore,
-		namesCache: make(map[string]bucket.BucketUid),
+		ephemeral:      eStore,
+		rested:         rStore,
+		writePartition: partition,
+		namesCache:     make(map[string]bucket.BucketUid),
 	}
 	return s, nil
 }
@@ -55,12 +58,6 @@ func (s TwoPhasesStore) Save(b *bucket.Bucket) error {
 
 // Commit in rested store
 func (s TwoPhasesStore) Commit(b *bucket.Bucket, squash bool) error {
-	if squash {
-		panic("not implemented yet")
-	}
-
-	// TODO: promote bucket from ephemeral to rested store.
-
 	// How to import bucket from one service to another ?
 	// Service COULD implements an Export() / Import() pair of methods to :
 	// - duplicate a bucket with exactly same data
@@ -88,7 +85,12 @@ func (s TwoPhasesStore) Commit(b *bucket.Bucket, squash bool) error {
 
 	// Do we want to erase Bucket from ephemeral store => yes we delete the bucket dedicated partition.
 
-	panic("not implemented yet")
+	export, err := s.ephemeral.Export(b.Header.Uid, false, false, squash)
+	if err != nil {
+		return err
+	}
+	err = s.rested.Import(export, s.writePartition)
+	return err
 }
 
 // Return all Names associated with it's last Bucket Uid

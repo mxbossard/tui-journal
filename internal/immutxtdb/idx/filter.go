@@ -1,6 +1,9 @@
 package idx
 
-import "time"
+import (
+	"bytes"
+	"time"
+)
 
 // Return ok=true to select entry, return loop=false to stop iterating.
 type stateFilter func(s State) (ok bool, loop bool)
@@ -242,12 +245,37 @@ func StateFilter(sf stateFilter) *aggFilter {
 	return filter
 }
 
+func MatchStateFilter(state State, stopAtFirst bool) *aggFilter {
+	return StateFilter(func(s State) (ok bool, loop bool) {
+		ok = bytes.Equal(s, state)
+		loop = true
+		if stopAtFirst {
+			loop = !ok
+		} else {
+			loop = true
+		}
+		return
+	})
+}
+
 func KeyFilter(kf keyFilter) *aggFilter {
 	filter := &aggFilter{logicalOr: false}
 	if kf != nil {
 		filter.AddKeyFilter(kf)
 	}
 	return filter
+}
+
+func MatchBytesKeyFilter(key []byte, stopAtFirst bool) *aggFilter {
+	return KeyFilter(func(k []byte, s State) (ok bool, loop bool) {
+		ok = bytes.Equal(k, key)
+		if stopAtFirst {
+			loop = !ok
+		} else {
+			loop = true
+		}
+		return
+	})
 }
 
 type filterBuilder struct {

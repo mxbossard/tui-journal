@@ -57,8 +57,8 @@ type Layer struct {
 	Metadata   *Metadata
 	Content    []byte
 	State      idx.State
-	Commited   bool
-	Snapshoted bool
+	//Commited   bool
+	//Snapshoted bool
 }
 
 // Store Bucket metadata which rarely changes
