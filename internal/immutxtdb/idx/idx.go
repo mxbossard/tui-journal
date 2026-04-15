@@ -45,13 +45,13 @@ type Index[K comparable, V any] interface {
 	// ----- Browsing Methods -----
 	// Paginate all KV entries matching supplied key & Filter
 	Filter(key K, order Order, f Filter) (Paginer[K, V], error)
-	// Paginate all KV entries matching supplied key & Filter
+	// Paginate all KV entries matching supplied hashed key & Filter
 	HashedFilter(key K, order Order, f Filter) (Paginer[K, V], error)
 	// Paginate all KV entries matching supplied Filter
 	FilterAll(order Order, f Filter) (Paginer[K, V], error)
 	// Paginate all KV entries exactly matching supplied key
 	Paginate(key K, order Order) (Paginer[K, V], error)
-	// Paginate all KV entries matching supplied key which will be rotating hashed
+	// Paginate all KV entries matching supplied hashed key which will be rotating hashed
 	HashedPaginate(key K, order Order) (Paginer[K, V], error)
 	// Paginate all KV entries
 	PaginateAll(order Order) (Paginer[K, V], error)
@@ -248,7 +248,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 				}
 				loop := true
 				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
-					// callback func impl
+					// callback func impl for each decoded line
 					if err != nil {
 						// decoding err => we want to push it and keep iterating
 						e := NewErrEntry[K, V](err)
@@ -259,6 +259,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 						return true
 					}
 
+					keyFilterMatch := false
 					if f != nil {
 						sf := f.StateFilter()
 						if sf != nil {
@@ -278,15 +279,31 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 							}
 							loop = loop && iloop
 						}
-						kf := f.KeyFilter()
-						if kf != nil {
-							// If KeyFilter does not match ignore the entry
-							ok, iloop := kf(key, s)
-							if !ok {
-								return true
-							}
-							loop = loop && iloop
-						}
+						// kf := f.KeyFilter()
+						// if kf != nil {
+						// 	// If KeyFilter does not match ignore the entry
+						// 	hashedK = key
+						// 	if i.keyHasher != nil {
+						// 		// Rotating Hash
+						// 		hashedK, err = i.keyHasher(seq, filteringK)
+						// 		if err != nil {
+						// 			// hashing err => we want to push it and keep iterating
+						// 			e := NewErrEntry[K, V](err)
+						// 			if !push(e) {
+						// 				// we want to stop iterating and then stop decoding
+						// 				return false
+						// 			}
+						// 			return true
+						// 		}
+						// 	}
+
+						// 	ok, iloop := kf(hashedK, s)
+						// 	keyFilterMatch = ok
+						// 	if !ok {
+						// 		return true
+						// 	}
+						// 	loop = loop && iloop
+						// }
 						seqf := f.SeqFilter()
 						if seqf != nil {
 							// If SeqFilter does not match ignore the entry
@@ -317,8 +334,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 					}
 
 					// FIXME: do not use serializer if K or V is of []byte type.
-					if !keyFiltering || bytes.Equal(hashedK, key) {
-						// if key == filteringKey {
+					if !keyFiltering || keyFilterMatch || bytes.Equal(hashedK, key) {
 						// FIXME: if key was hashed => cannot be deserialized ! => return nil ?
 						var k K
 						if i.keySerializer != nil {

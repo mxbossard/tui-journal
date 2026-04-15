@@ -20,7 +20,7 @@ type seqFilter func(s int, o Order) (ok bool, loop bool)
 type Filter interface {
 	StateFilter() stateFilter
 	TimeFilter() timeFilter
-	KeyFilter() keyFilter
+	// KeyFilter() keyFilter // FIXME: KeyFilter need more work in order to works.
 	SeqFilter() seqFilter
 }
 
@@ -258,33 +258,36 @@ func MatchStateFilter(state State, stopAtFirst bool) *aggFilter {
 	})
 }
 
-func KeyFilter(kf keyFilter) *aggFilter {
-	filter := &aggFilter{logicalOr: false}
-	if kf != nil {
-		filter.AddKeyFilter(kf)
-	}
-	return filter
-}
+// func KeyFilter(kf keyFilter) *aggFilter {
+// 	filter := &aggFilter{logicalOr: false}
+// 	if kf != nil {
+// 		filter.AddKeyFilter(kf)
+// 	}
+// 	return filter
+// }
 
-func MatchBytesKeyFilter(key []byte, stopAtFirst bool) *aggFilter {
-	return KeyFilter(func(k []byte, s State) (ok bool, loop bool) {
-		ok = bytes.Equal(k, key)
-		if stopAtFirst {
-			loop = !ok
-		} else {
-			loop = true
-		}
-		return
-	})
-}
+// Filter using bytes key in Index.
+// In case of key rotating hashed supplied key will be rotating hashed.
+// func MatchBytesKeyFilter(key []byte, stopAtFirst bool) *aggFilter {
+// 	return KeyFilter(func(k []byte, s State) (ok bool, loop bool) {
+// 		fmt.Printf("MatchBytesKeyFilter: comparing %v with %v ...\n", k, key)
+// 		ok = bytes.Equal(k, key)
+// 		if stopAtFirst {
+// 			loop = !ok
+// 		} else {
+// 			loop = true
+// 		}
+// 		return
+// 	})
+// }
 
-type filterBuilder struct {
-}
+// type filterBuilder struct {
+// }
 
-func (b filterBuilder) AddOr() {
-	panic("not implemented yet")
-}
+// func (b filterBuilder) AddOr() {
+// 	panic("not implemented yet")
+// }
 
-func NewFilter() filterBuilder {
-	panic("not implemented yet")
-}
+// func NewFilter() filterBuilder {
+// 	panic("not implemented yet")
+// }

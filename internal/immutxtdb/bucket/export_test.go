@@ -37,13 +37,13 @@ func TestExport_Export_Then_Import(t *testing.T) {
 	// Make bucket A
 	bktA := svc1.New(expectedNameA, expectedLabels)
 	assert.NotNil(t, bktA)
-	err = bktA.WriteText(expectedMsgA1)
+	err = bktA.UpdateText(expectedMsgA1)
 	assert.NoError(t, err)
 	err = svc1.Save(bktA, expectedPartition1)
 	assert.NoError(t, err)
 
 	// Update bucket A
-	err = bktA.WriteText(expectedMsgA2)
+	err = bktA.UpdateText(expectedMsgA2)
 	assert.NoError(t, err)
 	err = svc1.Save(bktA, expectedPartition1)
 	assert.NoError(t, err)
@@ -51,7 +51,7 @@ func TestExport_Export_Then_Import(t *testing.T) {
 	// Make bucket B
 	bktB := svc1.New(expectedNameB, expectedLabels)
 	assert.NotNil(t, bktB)
-	err = bktB.WriteText(expectedMsgB1)
+	err = bktB.UpdateText(expectedMsgB1)
 	assert.NoError(t, err)
 	err = svc1.Save(bktB, expectedPartition1)
 	assert.NoError(t, err)

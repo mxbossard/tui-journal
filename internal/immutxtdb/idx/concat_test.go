@@ -42,7 +42,7 @@ var (
 	time9         = timez.ParseOrPanic(YYYYMMDD, "2026-03-23")
 )
 
-func testBuildCatIdx(t *testing.T) (string, *BasicIndexCat[string, string]) {
+func testBuildCatIdx(t *testing.T) (string, *BasicIndexAggregate[string, string]) {
 	tmpDir := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpDir)
 
@@ -84,7 +84,7 @@ func testBuildCatIdx(t *testing.T) (string, *BasicIndexCat[string, string]) {
 	assert.NoError(t, err)
 	require.NotNil(t, idxD)
 
-	return tmpDir, NewCat(1, 0,
+	return tmpDir, Aggregate(1, 0,
 		map[string]Index[string, string]{
 			partitionA: idxA,
 			partitionB: idxB,

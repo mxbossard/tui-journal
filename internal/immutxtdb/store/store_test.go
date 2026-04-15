@@ -59,7 +59,7 @@ func TestStore_Save(t *testing.T) {
 	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
 
-	err = b.WriteText(expectedTxt)
+	err = b.UpdateText(expectedTxt)
 	assert.NoError(t, err)
 
 	err = s.Save(b)
@@ -90,7 +90,7 @@ func TestStore_Get(t *testing.T) {
 
 	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
-	err = b.WriteText(expectedTxt)
+	err = b.UpdateText(expectedTxt)
 	assert.NoError(t, err)
 
 	// Get after Save
@@ -138,7 +138,7 @@ func TestStore_Commit(t *testing.T) {
 
 	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
-	err = b.WriteText(expectedTxt)
+	err = b.UpdateText(expectedTxt)
 	assert.NoError(t, err)
 
 	// Get after Save
@@ -207,7 +207,7 @@ func TestStore_Filter(t *testing.T) {
 	// bA
 	bA := s1.NewBucket(expectedNameA, expectedLabels)
 	assert.NotNil(t, bA)
-	err = bA.WriteText(expectedTxtA1)
+	err = bA.UpdateText(expectedTxtA1)
 	assert.NoError(t, err)
 	err = s1.Save(bA)
 	assert.NoError(t, err)
@@ -215,7 +215,7 @@ func TestStore_Filter(t *testing.T) {
 	// bB (commited)
 	bB := s1.NewBucket(expectedNameB, expectedLabels)
 	assert.NotNil(t, bB)
-	err = bB.WriteText(expectedTxtB1)
+	err = bB.UpdateText(expectedTxtB1)
 	assert.NoError(t, err)
 	err = s1.Save(bB)
 	assert.NoError(t, err)
@@ -225,7 +225,7 @@ func TestStore_Filter(t *testing.T) {
 	// bC
 	bC := s1.NewBucket(expectedNameC, expectedLabels)
 	assert.NotNil(t, bC)
-	err = bC.WriteText(expectedTxtC1)
+	err = bC.UpdateText(expectedTxtC1)
 	assert.NoError(t, err)
 	err = s1.Save(bC)
 	assert.NoError(t, err)
@@ -233,7 +233,7 @@ func TestStore_Filter(t *testing.T) {
 	// bD (commited)
 	bD := s1.NewBucket(expectedNameD, expectedLabels)
 	assert.NotNil(t, bD)
-	err = bD.WriteText(expectedTxtD1)
+	err = bD.UpdateText(expectedTxtD1)
 	assert.NoError(t, err)
 	err = s1.Save(bD)
 	assert.NoError(t, err)
@@ -243,7 +243,7 @@ func TestStore_Filter(t *testing.T) {
 	// bE
 	bE := s1.NewBucket(expectedNameE, expectedLabels)
 	assert.NotNil(t, bE)
-	err = bE.WriteText(expectedTxtE1)
+	err = bE.UpdateText(expectedTxtE1)
 	assert.NoError(t, err)
 	err = s1.Save(bE)
 	assert.NoError(t, err)
@@ -313,27 +313,27 @@ func TestStore_Filter(t *testing.T) {
 	require.Nil(t, bE2)
 
 	// Check Filtering
-	paginerA1, err := s1.Filter(idx.TopToBottom, idx.MatchBytesKeyFilter(bB1.Header.Uid[:], false), 1, 0)
+	paginerA1, err := s1.Filter(idx.TopToBottom, idx.BetweenFilter(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerA1)
 	entriesA1 := iterz.Flatten(paginerA1.All())
 	require.Len(t, entriesA1, 1)
 	assert.Equal(t, expectedNameA, entriesA1[0].Val().Header.Name)
 
-	paginerA2, err := s2.Filter(idx.TopToBottom, idx.MatchBytesKeyFilter(bB1.Header.Uid[:], false), 1, 0)
+	paginerA2, err := s2.Filter(idx.TopToBottom, idx.BetweenFilter(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerA1)
 	entriesA2 := iterz.Flatten(paginerA2.All())
 	require.Len(t, entriesA2, 0)
 
-	paginerB1, err := s1.Filter(idx.TopToBottom, idx.MatchBytesKeyFilter(bB1.Header.Uid[:], false), 1, 0)
+	paginerB1, err := s1.Filter(idx.TopToBottom, idx.BetweenFilter(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerB1)
 	entriesB1 := iterz.Flatten(paginerB1.All())
 	require.Len(t, entriesB1, 1)
 	assert.Equal(t, expectedNameB, entriesB1[0].Val().Header.Name)
 
-	paginerB2, err := s2.Filter(idx.TopToBottom, idx.MatchBytesKeyFilter(bB1.Header.Uid[:], false), 1, 0)
+	paginerB2, err := s2.Filter(idx.TopToBottom, idx.BetweenFilter(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerB2)
 	entriesB2 := iterz.Flatten(paginerB2.All())

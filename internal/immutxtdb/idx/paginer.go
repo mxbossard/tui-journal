@@ -3,6 +3,8 @@ package idx
 import (
 	"errors"
 	"iter"
+
+	"github.com/mxbossard/utilz/iterz"
 )
 
 type page[K comparable, V any] struct {
@@ -55,6 +57,8 @@ type Paginer[K comparable, V any] interface {
 	Next() (*page[K, V], bool, error)
 	Pages() iter.Seq2[error, *page[K, V]]
 	All() iter.Seq[Entry[K, V]]
+	PageSize() int
+	PreloadedPageCount() int
 }
 
 type paginer[K comparable, V any] struct {
@@ -195,6 +199,14 @@ func (p *paginer[K, V]) All() iter.Seq[Entry[K, V]] {
 	}
 }
 
+func (p *paginer[K, V]) PageSize() int {
+	return p.pageSize
+}
+
+func (p *paginer[K, V]) PreloadedPageCount() int {
+	return p.preloadCount
+}
+
 // Build a Paginer.
 // Current implem preload all page items (pageSize & preloadPageCount are important).
 // pusher func must be implemented to push each items to paginer using push function.
@@ -233,4 +245,34 @@ func NewUpdatablePaginer[K comparable, V any](pageSize, preloadPageCount int, pu
 	// - use a new updater callback ?
 	// HOW TO ?
 	panic("not implemented yet")
+}
+
+func CatPaginers[K comparable, V any](compare func(a, b Entry[K, V]) int, pageSize, preloadPageCount int, paginers ...Paginer[K, V]) Paginer[K, V] {
+	var paginersIts []iter.Seq[Entry[K, V]]
+	for _, p := range paginers {
+		paginersIts = append(paginersIts, p.All())
+	}
+
+	iterator := iterz.Merge(compare, paginersIts...)
+	paginer := NewPaginer(pageSize, preloadPageCount, func(push func(e Entry[K, V]) bool) {
+		for i := range iterator {
+			if !push(i) {
+				return
+			}
+		}
+	})
+	return paginer
+}
+
+func FilterPaginer[K comparable, V any](filter func(e Entry[K, V]) bool, p Paginer[K, V]) Paginer[K, V] {
+	paginer := NewPaginer(p.PageSize(), p.PreloadedPageCount(), func(push func(e Entry[K, V]) bool) {
+		for i := range p.All() {
+			if filter(i) {
+				if !push(i) {
+					return
+				}
+			}
+		}
+	})
+	return paginer
 }

@@ -65,6 +65,7 @@ type Service interface {
 	// Get a Bucket by it's Uid
 	Get(uid BucketUid) (*Bucket, error)
 	// Get a slice of Buckets
+	// FIXME: filter on which terms ? CANNOT reuse idx filters and use it on all bucket indexes.
 	Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
 	// Save a Bucket
 	Save(b *Bucket, partition string) error
@@ -111,7 +112,7 @@ func (s *bucketService) new(name string, labels Labels) *Bucket {
 
 func (s *bucketService) NewText(name string, labels Labels, text string) (*Bucket, error) {
 	b := s.New(name, labels)
-	err := b.WriteText(text)
+	err := b.UpdateText(text)
 	return b, err
 }
 

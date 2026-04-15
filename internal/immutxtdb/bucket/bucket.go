@@ -54,9 +54,9 @@ type Metadata struct {
 }
 
 type Layer struct {
-	Metadata   *Metadata
-	Content    []byte
-	State      idx.State
+	Metadata *Metadata
+	Content  []byte
+	State    idx.State
 	//Commited   bool
 	//Snapshoted bool
 }
@@ -154,9 +154,9 @@ func (b *Bucket) ProjectText(version Version) (txt string, err error) {
 	return projectText(b, version)
 }
 
-func (b *Bucket) Write(data []byte) (int, error) {
+func (b *Bucket) Update(data []byte) (int, error) {
 	if b.Header.Mode == TextMode {
-		return -1, fmt.Errorf("use WriteText for text mode bucket")
+		return -1, fmt.Errorf("use UpdateText for text mode bucket")
 	}
 
 	b.Mutex.Lock()
@@ -169,7 +169,7 @@ func (b *Bucket) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (b *Bucket) WriteText(text string) error {
+func (b *Bucket) UpdateText(text string) error {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 	if b.Header.Mode != 0 && b.Header.Mode != TextMode {

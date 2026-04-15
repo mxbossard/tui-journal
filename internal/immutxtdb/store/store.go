@@ -137,10 +137,6 @@ func (s TwoPhasesStore) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageC
 		return nil, err
 	}
 
-	// TODO: Need to concat 2 paginers ordered by what ?
-	// need to apply a distinct filter to not list same bucket from ephemeral & stored.
-	_ = pe
-	_ = pr
-
-	panic("not implemented yet")
+	// TODO: need to apply a distinct filter to not list same bucket from ephemeral & stored.
+	return idx.CatPaginers(idx.EntryTimeCompare[bucket.BucketUid, *bucket.Bucket](o), pageSize, preloadPageCount, pe, pr), nil
 }

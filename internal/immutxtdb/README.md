@@ -11,6 +11,9 @@
 - [x] Keep state of last version loaded in case of successive loading ?
 - [_] Add idx export / import unittests (especially with hashed keys)
 - [x] Add Bucket Service Export / Import (without squashing for now)
+- [_] Fix Bucket service filtering (cannot use same filtering than idx) 
+      - Need smarter filtering : (if one layer is found all the bucket must be loaded) 
+      - On which terms filter ? times (creation, update), bucket states, bucket names ?, bucket uids ?
 - [_] Implem Two Phases store first version
 - [_] Add Store / Service Snapshot() HOW ?
 - [x] Idx Concatenation
