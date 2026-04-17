@@ -1,7 +1,6 @@
 package idx
 
 import (
-	"bytes"
 	"fmt"
 	"iter"
 	"path/filepath"
@@ -43,17 +42,20 @@ type Index[K comparable, V any] interface {
 	// Paginate all KV entries matching supplied key & Filter
 	Filter(key K, order Order, f Filter) (Paginer[K, V], error)
 	// Paginate all KV entries matching supplied hashed key & Filter
-	HashedFilter(key K, order Order, f Filter) (Paginer[K, V], error)
+	// HashedFilter(key K, order Order, f Filter) (Paginer[K, V], error)
 	// Paginate all KV entries matching supplied Filter
 	FilterAll(order Order, f Filter) (Paginer[K, V], error)
 	// Paginate all KV entries exactly matching supplied key
 	Paginate(key K, order Order) (Paginer[K, V], error)
 	// Paginate all KV entries matching supplied hashed key which will be rotating hashed
-	HashedPaginate(key K, order Order) (Paginer[K, V], error)
+	// HashedPaginate(key K, order Order) (Paginer[K, V], error)
 	// Paginate all KV entries
 	PaginateAll(order Order) (Paginer[K, V], error)
 	// Return an iterator of all KV entries
 	All(order Order) (iter.Seq[Entry[K, V]], error)
+
+	// Build an ExactKeyFilter
+	KeysFilter(stopAtFirstMatch bool, keys ...K) (*aggFilter, error)
 }
 
 type basicIndex[K comparable, V any] struct {
@@ -212,20 +214,27 @@ func (i *basicIndex[K, V]) LastSeq() (int, error) {
 	return count, nil
 }
 
-func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, order Order, f Filter) (Paginer[K, V], error) {
+func (i *basicIndex[K, V]) filter(order Order, f Filter) (Paginer[K, V], error) {
 	// TODO: cache all the bloc file content ?
 	// TODO: call all the index content ?
 	// FIXME : which order of idx files to iterate ?
 
-	var hashedK []byte
-	var filteringK []byte
-	if keyFiltering {
-		filteringK = make([]byte, i.encoder.KeySize())
-		var err error
-		if i.keySerializer != nil {
-			_, err = i.keySerializer.Serialize(suppliedKey, filteringK)
-			if err != nil {
-				return nil, err
+	var sf stateFilter
+	var tf timeFilter
+	var qf seqFilter
+	var kf KeyFilter
+	var mkf matchKeyFilter
+	var ekf *initedKeyFilter
+	if f != nil {
+		sf = f.StateFilter()
+		tf = f.TimeFilter()
+		qf = f.SeqFilter()
+		kf = f.KeyFilter()
+		if kf != nil {
+			mkf = kf.MatchKeyFilter()
+			ekf = kf.ExactKeyFilter()
+			if ekf != nil {
+				ekf.init(i.keyHasher)
 			}
 		}
 	}
@@ -234,9 +243,11 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 	p := NewPaginer(i.pageSize, i.preloadPageCount, func(push func(Entry[K, V]) bool) {
 		// pusher func impl
 
-	End:
+		// fmt.Printf("filter: loop0 idxFiles: %v\n", idxFiles)
 		for _, bf := range idxFiles {
+			// fmt.Printf("filter: loop1 bf: %s\n", bf.Name())
 			for err, b := range bf.All(filez.BlocOrdering(order)) {
+				// fmt.Printf("filter: loop2 b: %v\n", b.Uid)
 				if err != nil {
 					e := NewErrEntry[K, V](err)
 					if !push(e) {
@@ -256,113 +267,65 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 						return true
 					}
 
-					keyFilterMatch := false
-					if f != nil {
-						sf := f.StateFilter()
-						if sf != nil {
-							// If StateFilter does not match ignore the entry
-							ok, iloop := sf(s)
-							if !ok {
-								return true
-							}
-							loop = loop && iloop
+					if sf != nil {
+						// If StateFilter does not match ignore the entry
+						ok, iloop := sf(s)
+						if !ok {
+							return true
 						}
-						tf := f.TimeFilter()
-						if tf != nil {
-							// If TimeFilter does not match ignore the entry
-							ok, iloop := tf(t)
-							if !ok {
-								return true
-							}
-							loop = loop && iloop
+						loop = loop && iloop
+					}
+					if tf != nil {
+						// If TimeFilter does not match ignore the entry
+						ok, iloop := tf(t)
+						if !ok {
+							return true
 						}
-
-						mkf := f.MatchKeyFilter()
-						if mkf != nil {
-							// If MatchKeyFilter does not match ignore the entry
-							ok, iloop := mkf(key, s)
-							if !ok {
-								return true
-							}
-							loop = loop && iloop
-						}
-
-						ekf := f.ExactKeyFilter()
-						if ekf != nil {
-							// If MatchKeyFilter does not match ignore the entry
-							ok, iloop, err := ekf.isExactly(seq, key)
-							if err != nil {
-								// decoding err => we want to push it and keep iterating
-								e := NewErrEntry[K, V](err)
-								if !push(e) {
-									// we want to stop iterating and then stop decoding
-									return false
-								}
-								return true
-							}
-							if !ok {
-								return true
-							}
-							loop = loop && iloop
-						}
-
-						// kf := f.KeyFilter()
-						// if kf != nil {
-						// 	// If KeyFilter does not match ignore the entry
-						// 	hashedK = key
-						// 	if i.keyHasher != nil {
-						// 		// Rotating Hash
-						// 		hashedK, err = i.keyHasher(seq, filteringK)
-						// 		if err != nil {
-						// 			// hashing err => we want to push it and keep iterating
-						// 			e := NewErrEntry[K, V](err)
-						// 			if !push(e) {
-						// 				// we want to stop iterating and then stop decoding
-						// 				return false
-						// 			}
-						// 			return true
-						// 		}
-						// 	}
-
-						// 	ok, iloop := kf(hashedK, s)
-						// 	keyFilterMatch = ok
-						// 	if !ok {
-						// 		return true
-						// 	}
-						// 	loop = loop && iloop
-						// }
-
-						seqf := f.SeqFilter()
-						if seqf != nil {
-							// If SeqFilter does not match ignore the entry
-							ok, iloop := seqf(seq, order)
-							if !ok {
-								return true
-							}
-							loop = loop && iloop
-						}
+						loop = loop && iloop
 					}
 
-					if keyFiltering {
-						if hashedKey && i.keyHasher != nil {
-							// Rotating Hash
-							hashedK, err = i.keyHasher(seq, filteringK)
-							if err != nil {
-								// hashing err => we want to push it and keep iterating
-								e := NewErrEntry[K, V](err)
-								if !push(e) {
-									// we want to stop iterating and then stop decoding
-									return false
-								}
-								return true
-							}
-						} else {
-							hashedK = filteringK
+					matchingKeyFilter := false
+					if mkf != nil {
+						// If MatchKeyFilter does not match ignore the entry
+						ok, iloop := mkf(key, s)
+						if !ok {
+							return true
 						}
+						loop = loop && iloop
+						matchingKeyFilter = ok
+					}
+
+					if ekf != nil {
+						// If MatchKeyFilter does not match ignore the entry
+						// fmt.Printf("ekf: isExactly? %d %v\n", seq, key)
+						ok, iloop, err := ekf.isExactly(seq, key)
+						if err != nil {
+							// decoding err => we want to push it and keep iterating
+							e := NewErrEntry[K, V](err)
+							if !push(e) {
+								// we want to stop iterating and then stop decoding
+								return false
+							}
+							return true
+						}
+						if !ok {
+							return true
+						}
+						loop = loop && iloop
+						matchingKeyFilter = matchingKeyFilter || ok
+					}
+
+					if qf != nil {
+						// If SeqFilter does not match ignore the entry
+						ok, iloop := qf(seq, order)
+						if !ok {
+							return true
+						}
+						loop = loop && iloop
 					}
 
 					// FIXME: do not use serializer if K or V is of []byte type.
-					if !keyFiltering || keyFilterMatch || bytes.Equal(hashedK, key) {
+					if matchingKeyFilter || kf == nil { //|| !keyFiltering || bytes.Equal(hashedK, key) {
 						// FIXME: if key was hashed => cannot be deserialized ! => return nil ?
 						var k K
 						if i.keySerializer != nil {
@@ -372,7 +335,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 						if i.valSerializer != nil {
 							v, err = i.valSerializer.Deserialize(val)
 						}
-						e := NewEntry(k, v, seq, t, s, err, hashedK)
+						e := NewEntry(k, v, seq, t, s, err, key)
 						if !push(e) {
 							return false
 						}
@@ -382,38 +345,68 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 				})
 				if !loop {
 					// Stop iterating
+					// fmt.Printf("goto END\n")
 					goto End
 				}
 			}
 		}
+	End:
 	})
 	return p, nil
 }
 
 func (i *basicIndex[K, V]) Filter(suppliedKey K, order Order, f Filter) (Paginer[K, V], error) {
-	return i.filter(suppliedKey, true, false, order, f)
+	kf, err := i.KeysFilter(false, suppliedKey)
+	if err != nil {
+		return nil, err
+	}
+	kf.Add(f)
+	// var noKey K
+	// return i.filter(noKey, true, false, order, kf)
+	return i.filter(order, kf)
 }
 
-func (i *basicIndex[K, V]) HashedFilter(suppliedKey K, order Order, f Filter) (Paginer[K, V], error) {
-	return i.filter(suppliedKey, true, true, order, f)
-}
+// func (i *basicIndex[K, V]) HashedFilter(suppliedKey K, order Order, f Filter) (Paginer[K, V], error) {
+// 	kf, err := i.KeysFilter(false, suppliedKey)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	kf.Add(f)
+// 	// var noKey K
+// 	// return i.filter(noKey, true, true, order, kf)
+// 	return i.filter(order, kf)
+// }
 
 func (i *basicIndex[K, V]) FilterAll(order Order, f Filter) (Paginer[K, V], error) {
-	var noKey K
-	return i.filter(noKey, false, false, order, f)
+	// var noKey K
+	// return i.filter(noKey, false, false, order, f)
+	return i.filter(order, f)
 }
 
 func (i *basicIndex[K, V]) Paginate(key K, order Order) (Paginer[K, V], error) {
-	return i.filter(key, true, false, order, nil)
+	kf, err := i.KeysFilter(false, key)
+	if err != nil {
+		return nil, err
+	}
+	// var noKey K
+	// return i.filter(noKey, true, false, order, kf)
+	return i.filter(order, kf)
 }
 
-func (i *basicIndex[K, V]) HashedPaginate(key K, order Order) (Paginer[K, V], error) {
-	return i.filter(key, true, true, order, nil)
-}
+// func (i *basicIndex[K, V]) HashedPaginate(key K, order Order) (Paginer[K, V], error) {
+// 	kf, err := i.KeysFilter(false, key)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	// var noKey K
+// 	// return i.filter(noKey, true, true, order, kf)
+// 	return i.filter(order, kf)
+// }
 
 func (i *basicIndex[K, V]) PaginateAll(order Order) (Paginer[K, V], error) {
-	var noKey K
-	return i.filter(noKey, false, false, order, nil)
+	// var noKey K
+	// return i.filter(noKey, false, false, order, nil)
+	return i.filter(order, nil)
 }
 
 func (i *basicIndex[K, V]) All(order Order) (iter.Seq[Entry[K, V]], error) {
@@ -422,4 +415,30 @@ func (i *basicIndex[K, V]) All(order Order) (iter.Seq[Entry[K, V]], error) {
 		return nil, err
 	}
 	return paginer.All(), nil
+}
+
+func (i *basicIndex[K, V]) KeysFilter(stopAtFirstMatch bool, keys ...K) (*aggFilter, error) {
+	// Build all bytesKeys from supplied keys
+	var bytesKeys [][]byte
+	for _, key := range keys {
+		bk := make([]byte, i.encoder.KeySize())
+		_, err := i.keySerializer.Serialize(key, bk)
+		if err != nil {
+			return nil, err
+		}
+		bytesKeys = append(bytesKeys, bk)
+	}
+	// fmt.Printf("serialized keys: %v => %v\n", keys, bytesKeys)
+	bkf := basicKeyFilter{
+		exactKeyFilters: &initedKeyFilter{
+			keyFilter: keyFilter{
+				stopAtFirstMatch:  stopAtFirstMatch,
+				hashedKeySupplied: false,
+				bytesKeys:         bytesKeys,
+			},
+		},
+	}
+	f := NewFilter()
+	f.SetKeyFilter(bkf)
+	return f, nil
 }

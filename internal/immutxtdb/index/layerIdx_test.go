@@ -179,7 +179,7 @@ func TestLayerIndex_Paginate(t *testing.T) {
 	_, err = bIdx.Add(nil, expectedTime, &expectedBucket3, model.NewLayerRef("file4", 40, Dump))
 	assert.NoError(t, err)
 
-	p, errChan := bIdx.HashedPaginate(&expectedBucket0, idx.BottomToTop)
+	p, errChan := bIdx.Paginate(&expectedBucket0, idx.BottomToTop)
 	require.NotNil(t, p)
 	require.NotNil(t, errChan)
 

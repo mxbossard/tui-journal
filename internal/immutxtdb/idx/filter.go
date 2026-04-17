@@ -24,25 +24,25 @@ type Filter interface {
 	StateFilter() stateFilter
 	TimeFilter() timeFilter
 	SeqFilter() seqFilter
+	KeyFilter() KeyFilter
 }
 
-type KeyFilter[K comparable] interface {
+type KeyFilter interface {
 	MatchKeyFilter() matchKeyFilter
-	ExactKeyFilter() initedKeyFilter[K]
-	// KeyFilter() *keyFilter[any]
+	ExactKeyFilter() *initedKeyFilter
 }
 
-type basicKeyFilter[K comparable] struct {
-	KeyFilter[K]
+type basicKeyFilter struct {
+	KeyFilter
 	matchKeyFilters matchKeyFilter
-	exactKeyFilters *initedKeyFilter[K]
+	exactKeyFilters *initedKeyFilter
 }
 
-func (f basicKeyFilter[K]) MatchKeyFilter() matchKeyFilter {
+func (f basicKeyFilter) MatchKeyFilter() matchKeyFilter {
 	return f.matchKeyFilters
 }
 
-func (f basicKeyFilter[K]) ExactKeyFilter() *initedKeyFilter[K] {
+func (f basicKeyFilter) ExactKeyFilter() *initedKeyFilter {
 	return f.exactKeyFilters
 }
 
@@ -52,13 +52,20 @@ type aggFilter struct {
 	stateFilters []stateFilter
 	timeFilters  []timeFilter
 	seqFilters   []seqFilter
+	keyFilter    KeyFilter
 }
 
-func (f *aggFilter) Add(filters ...*aggFilter) *aggFilter {
+func (f *aggFilter) Add(filters ...Filter) *aggFilter {
 	for _, filter := range filters {
-		f.AddStateFilter(filter.StateFilter())
-		f.AddTimeFilter(filter.TimeFilter())
-		f.AddSeqFilter(filter.SeqFilter())
+		if filter != nil {
+			f.AddStateFilter(filter.StateFilter())
+			f.AddTimeFilter(filter.TimeFilter())
+			f.AddSeqFilter(filter.SeqFilter())
+			if filter.KeyFilter() != nil {
+				// Keep only last KeyFilter
+				f.keyFilter = filter.KeyFilter()
+			}
+		}
 	}
 	return f
 }
@@ -147,15 +154,44 @@ func (f aggFilter) SeqFilter() seqFilter {
 	}
 }
 
+func (f *aggFilter) SetKeyFilter(filter KeyFilter) *aggFilter {
+	f.keyFilter = filter
+	return f
+}
+
+func (f aggFilter) KeyFilter() KeyFilter {
+	return f.keyFilter
+}
+
+func NewFilter() *aggFilter {
+	f := &aggFilter{logicalOr: false}
+	return f
+}
+
+func DevelopFilter(filter Filter) *aggFilter {
+	f := &aggFilter{logicalOr: false}
+	if filter != nil {
+		f.AddSeqFilter(filter.SeqFilter())
+		f.AddStateFilter(filter.StateFilter())
+		f.AddTimeFilter(filter.TimeFilter())
+		f.SetKeyFilter(filter.KeyFilter())
+	}
+	return f
+}
+
 func AndFilter(filters ...*aggFilter) *aggFilter {
 	filter := &aggFilter{logicalOr: false}
-	filter.Add(filters...)
+	for _, f := range filters {
+		filter.Add(f)
+	}
 	return filter
 }
 
 func OrFilter(filters ...*aggFilter) *aggFilter {
 	filter := &aggFilter{logicalOr: true}
-	filter.Add(filters...)
+	for _, f := range filters {
+		filter.Add(f)
+	}
 	return filter
 }
 
@@ -237,7 +273,7 @@ func StateFilter(sf stateFilter) *aggFilter {
 	return filter
 }
 
-func MatchStateFilter(state State, stopAtFirst bool) *aggFilter {
+func IsStateFilter(state State, stopAtFirst bool) *aggFilter {
 	return StateFilter(func(s State) (ok bool, loop bool) {
 		ok = bytes.Equal(s, state)
 		loop = true
@@ -250,66 +286,45 @@ func MatchStateFilter(state State, stopAtFirst bool) *aggFilter {
 	})
 }
 
-func MatchKeyFilter(mkf matchKeyFilter) *basicKeyFilter[Void] {
-	filter := &basicKeyFilter[Void]{matchKeyFilters: mkf}
+func MatchKeyFilter[K comparable](mkf matchKeyFilter) *basicKeyFilter {
+	filter := &basicKeyFilter{matchKeyFilters: mkf}
 	return filter
 }
 
-func ExactKeyFilter[K comparable](ekf *initedKeyFilter[K]) *basicKeyFilter[K] {
-	filter := &basicKeyFilter[K]{exactKeyFilters: ekf}
-	return filter
-}
-
-type keyFilter[K comparable] struct {
+type keyFilter struct {
 	stopAtFirstMatch  bool
 	hashedKeySupplied bool // true if filtering on hashed keys
 	bytesKeys         [][]byte
-	keys              []K
-	matcher           matchKeyFilter
+	// keys              []K
+	matcher matchKeyFilter
 }
 
-func (f keyFilter[K]) match(decodedKey []byte, state State) (bool, bool) {
+func (f keyFilter) match(decodedKey []byte, state State) (bool, bool) {
 	return f.matcher(decodedKey, state)
 }
 
-type initedKeyFilter[K comparable] struct {
-	keyFilter[K]
-	encoder KeyEncoder[K]
-	hasher  GlidingHasher
+type initedKeyFilter struct {
+	keyFilter
+	// encoder KeyEncoder[K]
+	hasher GlidingHasher
 	// ekf     exactKeyFilter
 }
 
 // Init the filter
-func (f *initedKeyFilter[K]) init(encoder KeyEncoder[K], hasher GlidingHasher) {
-	f.encoder = encoder
+func (f *initedKeyFilter) init(hasher GlidingHasher) {
+	// f.encoder = encoder
 	f.hasher = hasher
 }
 
-func (f initedKeyFilter[K]) isExactly(pos int, decodedKey []byte) (bool, bool, error) {
-	// TODO: build f.byteKeys if nil & panic if keys is nil
-	// FIXME: bytesKeys & keys could be supplied both need to build all bytesKeys at least once
-	panic("need to implement this ^^^")
-	if len(f.bytesKeys) == 0 {
-		if len(f.keys) == 0 {
-			panic("neither keys or bytesKeys supplied to keyFilter")
-		}
-		// Build all bytesKeys from supplied keys
-		for _, key := range f.keys {
-			bk, err := f.encoder(key)
-			if err != nil {
-				return false, true, err
-			}
-			f.bytesKeys = append(f.bytesKeys, bk)
-		}
-	}
-
+func (f initedKeyFilter) isExactly(pos int, decodedKey []byte) (bool, bool, error) {
+	// build f.byteKeys if nil & panic if keys is nil
 	if f.hashedKeySupplied {
 		// Supplied keys are hashed
-		// TODO: Panic if no hasher supplied => Idx is not hashing keys
+		// Panic if no hasher supplied => Idx is not hashing keys
 		if f.hasher == nil {
 			panic("cannot use hashed keys, idx does not use GlidingHash")
 		}
-		// TODO: compare each byteKey to decodedKey
+		// compare each byteKey to decodedKey
 		for _, bk := range f.bytesKeys {
 			if bytes.Equal(decodedKey, bk) {
 				return true, !f.stopAtFirstMatch, nil
@@ -317,7 +332,7 @@ func (f initedKeyFilter[K]) isExactly(pos int, decodedKey []byte) (bool, bool, e
 		}
 	} else {
 		// Supplied keys are not hashed
-		// TODO: if hasher supplied => use hasher to hash each byteKey and compare it to decodedKey
+		// if hasher supplied => use hasher to hash each byteKey and compare it to decodedKey
 		var err error
 		for _, bk := range f.bytesKeys {
 			if f.hasher != nil {
@@ -335,63 +350,10 @@ func (f initedKeyFilter[K]) isExactly(pos int, decodedKey []byte) (bool, bool, e
 	return false, true, nil
 }
 
-// Filter using bytes key in Index.
-// In case of key rotating hashed supplied key will be rotating hashed.
-func ExactlyPlainBytesKeysFilter(stopAtFirstMatch bool, keys ...[]byte) *initedKeyFilter[Void] {
-	// TODO: aggFilter must store all keys and compare each decoded key to supplied keys.
-	// IN idx.filter epbkf.isExactly(pos, decodedKey)
-	// SHOULD panic if keys are hashed
-	ikf := initedKeyFilter[Void]{
-		keyFilter: keyFilter[Void]{
-			stopAtFirstMatch:  stopAtFirstMatch,
-			hashedKeySupplied: false,
-			bytesKeys:         keys,
-		},
-	}
-	return &ikf
-	panic("not implemented yet")
-}
-
-func ExactlyHashedBytesKeysFilter(stopAtFirstMatch bool, keys ...[]byte) *keyFilter[Void] {
-	// TODO: aggFilter must store all keys and compare each decoded key to supplied keys.
-	// SHOULD panic if keys are not hashed
-	kf := keyFilter[Void]{
-		stopAtFirstMatch:  stopAtFirstMatch,
-		hashedKeySupplied: true,
-		bytesKeys:         keys,
-	}
-	panic("not implemented yet")
-	return &kf
-
-	// return MatchKeyFilter(func(k []byte, s State) (ok bool, loop bool) {
-	// 	fmt.Printf("ExactlyHashedBytesKeysFilter: comparing %v with %v ...\n", k, key)
-	// 	ok = bytes.Equal(k, key)
-	// 	if stopAtFirst {
-	// 		loop = !ok
-	// 	} else {
-	// 		loop = true
-	// 	}
-	// 	return
-	// })
-}
-
-func KeysFilter[K comparable](stopAtFirstMatch bool, keys ...K) *keyFilter[K] {
-	// TODO: CAN we use ExactlyPlainBytesKeysFilter to converting keys ?
-	// Probably not, so we should store keys and let the idx.filter converting keys
-	// Should works if keys are hashed or not
-	kf := keyFilter[K]{
-		stopAtFirstMatch:  stopAtFirstMatch,
-		hashedKeySupplied: false,
-		keys:              keys,
-	}
-	panic("not implemented yet")
-	return &kf
-}
-
 func MatchPlainBytesKeysFilter(m matchKeyFilter) matchKeyFilter {
-	// TODO: idx.filter must call mpbkf.match(decodeKey, state)
+	// idx.filter must call mpbkf.match(decodeKey, state)
 	// Panic if key is hashed
-	kf := keyFilter[Void]{
+	kf := keyFilter{
 		stopAtFirstMatch:  false,
 		hashedKeySupplied: false,
 		matcher:           m,
@@ -402,19 +364,31 @@ func MatchPlainBytesKeysFilter(m matchKeyFilter) matchKeyFilter {
 	panic("not implemented yet")
 }
 
-type bar[K comparable] struct {
-	k K
+// Filter using bytes key in Index.
+// In case of key rotating hashed supplied key will be rotating hashed.
+func ExactlyPlainBytesKeysFilter(stopAtFirstMatch bool, keys ...[]byte) *initedKeyFilter {
+	// aggFilter must store all keys and compare each decoded key to supplied keys.
+	// IN idx.filter epbkf.isExactly(pos, decodedKey)
+	// SHOULD panic if keys are hashed
+	ikf := initedKeyFilter{
+		keyFilter: keyFilter{
+			stopAtFirstMatch:  stopAtFirstMatch,
+			hashedKeySupplied: false,
+			bytesKeys:         keys,
+		},
+	}
+	return &ikf
+	panic("not implemented yet")
 }
 
-func foo[K comparable](b bar[K]) bar[K] {
-	return bar[K]{}
-}
-
-func foo2() bar[int] {
-	return bar[int]{}
-}
-
-func baz() {
-
-	foo[string]()
+func ExactlyHashedBytesKeysFilter(stopAtFirstMatch bool, keys ...[]byte) *keyFilter {
+	// aggFilter must store all keys and compare each decoded key to supplied keys.
+	// SHOULD panic if keys are not hashed
+	kf := keyFilter{
+		stopAtFirstMatch:  stopAtFirstMatch,
+		hashedKeySupplied: true,
+		bytesKeys:         keys,
+	}
+	panic("not implemented yet")
+	return &kf
 }

@@ -879,12 +879,14 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.Equal(t, expectedMsg1+"updated", txt)
 
 	// Check second bkt
+	require.True(t, len(entries) > 1)
 	assert.Equal(t, expectedName3, entries[1].Val().Header.Name)
 	txt, err = entries[1].Val().ProjectText(LatestVersion)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg3, txt)
 
 	// Check third bkt
+	require.True(t, len(entries) > 2)
 	assert.Equal(t, expectedName4, entries[2].Val().Header.Name)
 	txt, err = entries[2].Val().ProjectText(LatestVersion)
 	assert.NoError(t, err)

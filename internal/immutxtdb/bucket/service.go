@@ -375,7 +375,7 @@ func (s *bucketService) buildLazyBucket(lastHeader *Header) (*Bucket, error) {
 		// FIXME: which uid key ?
 		// FIXME: use state filter to stop on first root state ?
 		// fmt.Printf("buildLazyBucket, bUid: %v\n", lastHeader.Uid)
-		bucketPgnr, err := bucketRefIdx.HashedPaginate(lastHeader.Uid, idx.BottomToTop)
+		bucketPgnr, err := bucketRefIdx.Paginate(lastHeader.Uid, idx.BottomToTop)
 		if err != nil {
 			return nil, err
 		}
@@ -422,7 +422,7 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 		}
 
 		// 1- Get last bucket header
-		headerPgnr, err := headerRefIdx.HashedPaginate(uid, idx.BottomToTop)
+		headerPgnr, err := headerRefIdx.Paginate(uid, idx.BottomToTop)
 		if err != nil {
 			return nil, err
 		}
@@ -581,7 +581,7 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 			// fmt.Printf("will scan all bucketRefs\n")
 		}
 
-		bucketPgnr, err := bucketRefIdx.HashedFilter(b.Header.Uid, idx.BottomToTop, f)
+		bucketPgnr, err := bucketRefIdx.Filter(b.Header.Uid, idx.BottomToTop, f)
 		if err != nil {
 			return nil, err
 		}

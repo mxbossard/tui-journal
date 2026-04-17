@@ -304,12 +304,14 @@ func (e basicIdxEncoder) DecodeAll(order Order, buf []byte, push func(int, time.
 	wordSize := e.WordSize()
 	if order == TopToBottom {
 		for k := 0; k < len(buf); k += wordSize {
+			// fmt.Printf("DecodeAll: decoding TopToBottom k:%d / %d (+%d)\n", k, len(buf), wordSize)
 			seq, state, t, key, val, err := e.Decode(buf[k:])
 			push(seq, state, t, key, val, err)
 		}
 	} else if order == BottomToTop {
 		wordCount := len(buf) / wordSize
 		for k := (wordCount - 1) * wordSize; k >= 0; k -= wordSize {
+			// fmt.Printf("DecodeAll: decoding BottomToTop k:%d / %d (-%d)\n", k, len(buf), wordSize)
 			seq, state, t, key, val, err := e.Decode(buf[k : k+wordSize])
 			if !push(seq, state, t, key, val, err) {
 				// Stop iterating

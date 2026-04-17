@@ -87,11 +87,11 @@ func (c BasicIndexAggregate[K, V]) Filter(key K, order Order, f Filter) (Paginer
 }
 
 // Paginate all KV entries matching supplied key & Filter
-func (c BasicIndexAggregate[K, V]) HashedFilter(key K, order Order, f Filter) (Paginer[K, V], error) {
-	return c.concat(EntryTimeCompare[K, V](order), func(i Index[K, V]) (Paginer[K, V], error) {
-		return i.HashedFilter(key, order, f)
-	})
-}
+// func (c BasicIndexAggregate[K, V]) HashedFilter(key K, order Order, f Filter) (Paginer[K, V], error) {
+// 	return c.concat(EntryTimeCompare[K, V](order), func(i Index[K, V]) (Paginer[K, V], error) {
+// 		return i.HashedFilter(key, order, f)
+// 	})
+// }
 
 // Paginate all KV entries matching supplied Filter
 func (c BasicIndexAggregate[K, V]) FilterAll(order Order, f Filter) (Paginer[K, V], error) {
@@ -108,11 +108,11 @@ func (c BasicIndexAggregate[K, V]) Paginate(key K, order Order) (Paginer[K, V], 
 }
 
 // Paginate all KV entries matching supplied key which will be rotating hashed
-func (c BasicIndexAggregate[K, V]) HashedPaginate(key K, order Order) (Paginer[K, V], error) {
-	return c.concat(EntryTimeCompare[K, V](order), func(i Index[K, V]) (Paginer[K, V], error) {
-		return i.HashedPaginate(key, order)
-	})
-}
+// func (c BasicIndexAggregate[K, V]) HashedPaginate(key K, order Order) (Paginer[K, V], error) {
+// 	return c.concat(EntryTimeCompare[K, V](order), func(i Index[K, V]) (Paginer[K, V], error) {
+// 		return i.HashedPaginate(key, order)
+// 	})
+// }
 
 // Paginate all KV entries
 func (c BasicIndexAggregate[K, V]) PaginateAll(order Order) (Paginer[K, V], error) {

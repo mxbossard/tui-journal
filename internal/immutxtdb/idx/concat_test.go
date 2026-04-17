@@ -251,49 +251,49 @@ func TestConcat_Filter(t *testing.T) {
 	assert.Equal(t, 3, k)
 }
 
-func TestConcat_HashedFilter(t *testing.T) {
-	tmpDir, cat := testBuildCatIdx(t)
-	defer os.RemoveAll(tmpDir)
+// func TestConcat_HashedFilter(t *testing.T) {
+// 	tmpDir, cat := testBuildCatIdx(t)
+// 	defer os.RemoveAll(tmpDir)
 
-	p, err := cat.HashedFilter("k1", TopToBottom, nil)
-	assert.NoError(t, err)
-	assert.NotNil(t, p)
+// 	p, err := cat.HashedFilter("k1", TopToBottom, nil)
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, p)
 
-	var k int
+// 	var k int
 
-	// First pagination use
-	k = 0
-	for e := range p.All() {
-		k++
-		assert.NotNil(t, e)
-		switch k {
-		case 1:
-			assert.Equal(t, expectedMsg1, e.Val())
-		case 2:
-			assert.Equal(t, expectedMsg6, e.Val())
-		case 3:
-			assert.Equal(t, expectedMsg7, e.Val())
-		}
-	}
-	assert.Equal(t, 3, k)
+// 	// First pagination use
+// 	k = 0
+// 	for e := range p.All() {
+// 		k++
+// 		assert.NotNil(t, e)
+// 		switch k {
+// 		case 1:
+// 			assert.Equal(t, expectedMsg1, e.Val())
+// 		case 2:
+// 			assert.Equal(t, expectedMsg6, e.Val())
+// 		case 3:
+// 			assert.Equal(t, expectedMsg7, e.Val())
+// 		}
+// 	}
+// 	assert.Equal(t, 3, k)
 
-	// Second pagination use
-	p.Reset()
-	k = 0
-	for e := range p.All() {
-		k++
-		assert.NotNil(t, e)
-		switch k {
-		case 1:
-			assert.Equal(t, expectedMsg1, e.Val())
-		case 2:
-			assert.Equal(t, expectedMsg6, e.Val())
-		case 3:
-			assert.Equal(t, expectedMsg7, e.Val())
-		}
-	}
-	assert.Equal(t, 3, k)
-}
+// 	// Second pagination use
+// 	p.Reset()
+// 	k = 0
+// 	for e := range p.All() {
+// 		k++
+// 		assert.NotNil(t, e)
+// 		switch k {
+// 		case 1:
+// 			assert.Equal(t, expectedMsg1, e.Val())
+// 		case 2:
+// 			assert.Equal(t, expectedMsg6, e.Val())
+// 		case 3:
+// 			assert.Equal(t, expectedMsg7, e.Val())
+// 		}
+// 	}
+// 	assert.Equal(t, 3, k)
+// }
 
 func TestConcat_FilterAll(t *testing.T) {
 	tmpDir, cat := testBuildCatIdx(t)
@@ -361,32 +361,32 @@ func TestConcat_Paginate(t *testing.T) {
 	assert.Equal(t, 3, k)
 }
 
-func TestConcat_HashedPaginate(t *testing.T) {
-	tmpDir, cat := testBuildCatIdx(t)
-	defer os.RemoveAll(tmpDir)
+// func TestConcat_HashedPaginate(t *testing.T) {
+// 	tmpDir, cat := testBuildCatIdx(t)
+// 	defer os.RemoveAll(tmpDir)
 
-	p, err := cat.HashedPaginate("k1", TopToBottom)
-	assert.NoError(t, err)
-	assert.NotNil(t, p)
+// 	p, err := cat.HashedPaginate("k1", TopToBottom)
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, p)
 
-	var k int
+// 	var k int
 
-	// First pagination use
-	k = 0
-	for e := range p.All() {
-		k++
-		assert.NotNil(t, e)
-		switch k {
-		case 1:
-			assert.Equal(t, expectedMsg1, e.Val())
-		case 2:
-			assert.Equal(t, expectedMsg6, e.Val())
-		case 3:
-			assert.Equal(t, expectedMsg7, e.Val())
-		}
-	}
-	assert.Equal(t, 3, k)
-}
+// 	// First pagination use
+// 	k = 0
+// 	for e := range p.All() {
+// 		k++
+// 		assert.NotNil(t, e)
+// 		switch k {
+// 		case 1:
+// 			assert.Equal(t, expectedMsg1, e.Val())
+// 		case 2:
+// 			assert.Equal(t, expectedMsg6, e.Val())
+// 		case 3:
+// 			assert.Equal(t, expectedMsg7, e.Val())
+// 		}
+// 	}
+// 	assert.Equal(t, 3, k)
+// }
 
 func TestConcat_PaginateAll(t *testing.T) {
 	tmpDir, cat := testBuildCatIdx(t)
