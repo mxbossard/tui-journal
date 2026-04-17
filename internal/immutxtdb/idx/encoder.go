@@ -12,6 +12,9 @@ type Euid uint64
 var NotMatchingEncoder = errors.New("encoder dos not match")
 var NotAsciiText = errors.New("supplied text is out of ASCII table")
 
+type KeyEncoder[K comparable] func(key K) ([]byte, error)
+type ValEncoder[V any] func(val V) ([]byte, error)
+
 type IdxEncoder interface {
 	StateSize() int
 	KeySize() int

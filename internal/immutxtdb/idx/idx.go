@@ -32,9 +32,6 @@ type Order string
 type void struct{}
 type Void *void
 
-type RotatingHasher func(int, []byte) ([]byte, error)
-type KeyRotatingHasher[K comparable] func(int, K) (K, error)
-
 // FIXME: Paginer SHOULD return KV Entries also embedding seq, time and state ?
 type Index[K comparable, V any] interface {
 	// Add a KV entry
@@ -67,8 +64,8 @@ type basicIndex[K comparable, V any] struct {
 	name, partition   string
 	keySerializer     serialize.Serializer[K]
 	valSerializer     serialize.Serializer[V]
-	keyHasher         RotatingHasher
-	valHasher         RotatingHasher
+	keyHasher         GlidingHasher
+	valHasher         GlidingHasher
 	encoder           IdxEncoder // FIXME: encoder must be attached to each BlocsFile or to each Bloc !
 	pageSize          int
 	preloadPageCount  int
@@ -83,7 +80,7 @@ type basicIndex[K comparable, V any] struct {
 // Partition should be a technical qualifier (like a device)
 func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
 	keySer serialize.Serializer[K], valSer serialize.Serializer[V],
-	keyH, valH RotatingHasher, enc IdxEncoder,
+	keyH, valH GlidingHasher, enc IdxEncoder,
 	pageSize, preloadPageCount int) (*basicIndex[K, V], error) {
 	// Init bucketIndex
 	// FIXME: manage multiple idx files (rotation)
@@ -279,6 +276,36 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 							}
 							loop = loop && iloop
 						}
+
+						mkf := f.MatchKeyFilter()
+						if mkf != nil {
+							// If MatchKeyFilter does not match ignore the entry
+							ok, iloop := mkf(key, s)
+							if !ok {
+								return true
+							}
+							loop = loop && iloop
+						}
+
+						ekf := f.ExactKeyFilter()
+						if ekf != nil {
+							// If MatchKeyFilter does not match ignore the entry
+							ok, iloop, err := ekf.isExactly(seq, key)
+							if err != nil {
+								// decoding err => we want to push it and keep iterating
+								e := NewErrEntry[K, V](err)
+								if !push(e) {
+									// we want to stop iterating and then stop decoding
+									return false
+								}
+								return true
+							}
+							if !ok {
+								return true
+							}
+							loop = loop && iloop
+						}
+
 						// kf := f.KeyFilter()
 						// if kf != nil {
 						// 	// If KeyFilter does not match ignore the entry
@@ -304,6 +331,7 @@ func (i *basicIndex[K, V]) filter(suppliedKey K, keyFiltering, hashedKey bool, o
 						// 	}
 						// 	loop = loop && iloop
 						// }
+
 						seqf := f.SeqFilter()
 						if seqf != nil {
 							// If SeqFilter does not match ignore the entry

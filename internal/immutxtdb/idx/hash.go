@@ -5,7 +5,11 @@ import (
 	"encoding/binary"
 )
 
-func NewRotatingHasher(salt []byte, size int) func(int, []byte) ([]byte, error) {
+// type RotatingHasher func(int, []byte) ([]byte, error)
+type GlidingHasher func(int, []byte) ([]byte, error)
+type KeyGlidingHasher[K comparable] func(int, K) (K, error)
+
+func NewRotatingHasher(salt []byte, size int) GlidingHasher {
 	return func(pos int, b []byte) ([]byte, error) {
 		hash := sha512.New()
 		hash.Write(salt)
