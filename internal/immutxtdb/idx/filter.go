@@ -15,9 +15,6 @@ type timeFilter func(t time.Time) (ok bool, loop bool)
 type matchKeyFilter func(decodedKey []byte, s State) (ok bool, loop bool)
 
 // Return ok=true to select entry, return loop=false to stop iterating.
-type exactKeyFilter func(pos int, k []byte) (ok bool, loop bool)
-
-// Return ok=true to select entry, return loop=false to stop iterating.
 type seqFilter func(pos int, o Order) (ok bool, loop bool)
 
 type Filter interface {

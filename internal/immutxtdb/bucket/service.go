@@ -66,7 +66,7 @@ type Service interface {
 	Get(uid BucketUid) (*Bucket, error)
 	// Get a slice of Buckets
 	// FIXME: filter on which terms ? CANNOT reuse idx filters and use it on all bucket indexes.
-	Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
+	Filter(o Order, f Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
 	// Save a Bucket
 	Save(b *Bucket, partition string) error
 	// Export all layers of a bucket
@@ -445,7 +445,7 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 	return s.buildLazyBucket(lastHeaderAllParts)
 }
 
-func (s *bucketService) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {
+func (s *bucketService) Filter(o Order, f Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {
 	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
 		return nil, err
