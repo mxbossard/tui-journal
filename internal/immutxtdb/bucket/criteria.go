@@ -9,11 +9,11 @@ import (
 
 type State idx.State
 
-type Sorting string
+type Sort string
 
 const (
-	YoungerFirst = Sorting("YoungerFirst")
-	OlderFirst   = Sorting("OlderFirst")
+	YoungerFirst = Sort("YoungerFirst")
+	OlderFirst   = Sort("OlderFirst")
 )
 
 type TimeMatcher = func(time.Time) bool
@@ -234,4 +234,18 @@ func (f unionCriteria) MatchingUids() []BucketUid {
 		}
 	}
 	return nil
+}
+
+func CreatedBetweenCriterion(after, before time.Time) *basicCriterion {
+	return &basicCriterion{
+		creationTimeAfter:  &after,
+		creationTimeBefore: &before,
+	}
+}
+
+func UpdatedBetweenCriterion(after, before time.Time) *basicCriterion {
+	return &basicCriterion{
+		updateTimeAfter:  &after,
+		updateTimeBefore: &before,
+	}
 }

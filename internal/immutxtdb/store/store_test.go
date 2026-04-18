@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/bucket"
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/iterz"
 	"github.com/mxbossard/utilz/ztring"
@@ -313,27 +312,27 @@ func TestStore_Filter(t *testing.T) {
 	require.Nil(t, bE2)
 
 	// Check Filtering
-	paginerA1, err := s1.Filter(idx.TopToBottom, idx.BetweenFilter(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
+	paginerA1, err := s1.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerA1)
 	entriesA1 := iterz.Flatten(paginerA1.All())
 	require.Len(t, entriesA1, 1)
 	assert.Equal(t, expectedNameA, entriesA1[0].Val().Header.Name)
 
-	paginerA2, err := s2.Filter(idx.TopToBottom, idx.BetweenFilter(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
+	paginerA2, err := s2.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerA1)
 	entriesA2 := iterz.Flatten(paginerA2.All())
 	require.Len(t, entriesA2, 0)
 
-	paginerB1, err := s1.Filter(idx.TopToBottom, idx.BetweenFilter(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
+	paginerB1, err := s1.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerB1)
 	entriesB1 := iterz.Flatten(paginerB1.All())
 	require.Len(t, entriesB1, 1)
 	assert.Equal(t, expectedNameB, entriesB1[0].Val().Header.Name)
 
-	paginerB2, err := s2.Filter(idx.TopToBottom, idx.BetweenFilter(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
+	paginerB2, err := s2.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerB2)
 	entriesB2 := iterz.Flatten(paginerB2.All())

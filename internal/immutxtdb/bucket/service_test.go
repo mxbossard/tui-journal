@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/mxbossard/utilz/collectionz"
 	"github.com/mxbossard/utilz/filez"
@@ -845,8 +844,7 @@ func TestBucketService_Filter(t *testing.T) {
 	err = svc.Save(bkt4, expectedPartition)
 	assert.NoError(t, err)
 
-	f := idx.AndFilter(idx.BeforeFilter(*day5), idx.AfterFilter(*day1))
-	pgnr, err := svc.Filter(idx.TopToBottom, f, 1, 1)
+	pgnr, err := svc.Filter(OlderFirst, CreatedBetweenCriterion(*day1, *day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr)
 
@@ -864,9 +862,8 @@ func TestBucketService_Filter(t *testing.T) {
 	}
 	assert.Equal(t, 3, k)
 
-	panic("not implemented yet")
 	// Between day2 and day5 there is bkt3 & bkt4 created, bkt1 updated
-	pgnr2, err := svc.Filter(idx.TopToBottom, idx.BetweenFilter(*day2, *day5), 1, 1)
+	pgnr2, err := svc.Filter(OlderFirst, CreatedBetweenCriterion(*day2, *day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr2)
 	entries := iterz.Flatten(pgnr2.All())
@@ -957,8 +954,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	err = svc.Save(bkt5, expectedPart2)
 	assert.NoError(t, err)
 
-	f := idx.AndFilter(idx.BeforeFilter(*day5), idx.AfterFilter(*day1))
-	pgnr, err := svc.Filter(idx.TopToBottom, f, 1, 1)
+	pgnr, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day2, *day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr)
 

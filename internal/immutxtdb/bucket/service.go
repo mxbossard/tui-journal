@@ -66,7 +66,7 @@ type Service interface {
 	Get(uid BucketUid) (*Bucket, error)
 	// Get a slice of Buckets
 	// FIXME: filter on which terms ? CANNOT reuse idx filters and use it on all bucket indexes.
-	Filter(o Sorting, f Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
+	Filter(o Sort, f Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
 	// Save a Bucket
 	Save(b *Bucket, partition string) error
 	// Export all layers of a bucket
@@ -447,21 +447,25 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 	return s.buildLazyBucket(lastHeaderAllParts)
 }
 
-func (s *bucketService) Filter(o Sorting, c Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {
+func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {
 	// FIXME: SHOULD order partitons using supplied Order
 	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
 		return nil, err
 	}
 
+	// FIXME: ordering SHOULD be implemented correctly
+	var order idx.Order
+	switch sort {
+	case OlderFirst:
+		order = idx.TopToBottom
+	case YoungerFirst:
+		order = idx.BottomToTop
+	}
+
 	var paginers []iter.Seq[idx.Entry[BucketUid, *Bucket]]
 	for _, partition := range existingParts {
-		headerRefIdx, err := getHeaderRefIndex(s.dir, s.salt, partition)
-		if err != nil {
-			return nil, err
-		}
-
-		bucketNameIdx, err := getBucketNameIndex(s.dir, s.salt, partition)
+		bucketNameIdx, headerRefIdx, bucketRefIdx, err := getServiceIndexes(s.dir, s.salt, partition)
 		if err != nil {
 			return nil, err
 		}
@@ -479,17 +483,65 @@ func (s *bucketService) Filter(o Sorting, c Criteria, pageSize, preloadPageCount
 		// - Bucket updateTime filter => Need to scan bucketRefIdx time where bucket updateTime is indexed
 		// 		THEN thin filter on Metadata.Updated time THEN filter by BucketUID stored in Metadata
 
+		// 1- If Name criteria resolve corresponding BucketUids
+		var uidsFromNamesCriteria []BucketUid
+		if c.BucketNameMatcher() != nil {
+			kf, err := bucketNameIdx.KeysFilter(false, c.MatchingNames()...)
+			if err != nil {
+				return nil, err
+			}
+			paginer, err := bucketNameIdx.FilterAll(idx.BottomToTop, kf)
+			if err != nil {
+				return nil, err
+			}
+			for e := range paginer.All() {
+				if err = e.Error(); err != nil {
+					return nil, err
+				}
+				uidsFromNamesCriteria = append(uidsFromNamesCriteria, e.Val())
+			}
+			fmt.Printf("Found uids from names: %v\n", uidsFromNamesCriteria)
+		}
+
+		// 2- If UpdateTime criteria resolve corresponding BucketUids
+		var uidsFromUpdateTimeCriteria []BucketUid
+		if c.UpdateTimeMatcher() != nil {
+			tf := idx.TimeFilter(func(t time.Time) (bool, bool) {
+				matcher := c.UpdateTimeMatcher()
+				ok := matcher(t)
+				return ok, true
+			})
+			paginer, err := bucketRefIdx.FilterAll(idx.BottomToTop, tf)
+			if err != nil {
+				return nil, err
+			}
+			for e := range paginer.All() {
+				if err = e.Error(); err != nil {
+					return nil, err
+				}
+				// FIXME: add Metadata caching
+				metadata, err := loadMetadata(&e.Val().MetadataRef)
+				if err != nil {
+					return nil, err
+				}
+				uidsFromUpdateTimeCriteria = append(uidsFromUpdateTimeCriteria, metadata.Uid)
+			}
+			fmt.Printf("Found uids from updateTimes: %v\n", uidsFromUpdateTimeCriteria)
+		}
+
+		// 2- If BucketUid criteria Merge with uidsFromNamesCriteria
 		headerRefIdxFilter := idx.NewFilter()
-		bucketNameIdxFilter := idx.NewFilter()
-		bucketRefIdxFilter := idx.NewFilter()
 		if c.MatchingUids() != nil {
-			kf, err := headerRefIdx.KeysFilter(false, c.MatchingUids()...)
+			uidsFromNamesCriteria = append(uidsFromNamesCriteria, c.MatchingUids()...)
+			uidsFromNamesCriteria = append(uidsFromNamesCriteria, uidsFromUpdateTimeCriteria...)
+			kf, err := headerRefIdx.KeysFilter(false, uidsFromNamesCriteria...)
 			if err != nil {
 				return nil, err
 			}
 			headerRefIdxFilter.Add(kf)
 		}
 
+		// 3- If State criteria add it to headerRefIdxFilter
 		if c.BucketStateMatcher() != nil {
 			f := idx.StateFilter(func(s idx.State) (bool, bool) {
 				matcher := c.BucketStateMatcher()
@@ -499,26 +551,18 @@ func (s *bucketService) Filter(o Sorting, c Criteria, pageSize, preloadPageCount
 			headerRefIdxFilter.Add(f)
 		}
 
-		if c.BucketNameMatcher() != nil {
-			kf, err := bucketNameIdx.KeysFilter(false, c.MatchingNames()...)
-			if err != nil {
-				return nil, err
-			}
-			bucketNameIdxFilter.Add(kf)
-		}
-
+		// 4- If CreationTime criteria add it to headerRefIdxFilter
 		if c.CreationTimeMatcher() != nil {
-			// HOWTO build a filter from time criteria ?
+			tf := idx.TimeFilter(func(t time.Time) (bool, bool) {
+				matcher := c.CreationTimeMatcher()
+				ok := matcher(t)
+				return ok, true
+			})
+			headerRefIdxFilter.Add(tf)
 		}
 
-		if c.UpdateTimeMatcher() != nil {
-
-		}
-
-		panic("not implemented yet")
-
-		// 1- Get a paginer of matching Bucket headers
-		headerPgnr, err := headerRefIdx.FilterAll(o, f)
+		// 5- Load Header matching criteria
+		headerPgnr, err := headerRefIdx.FilterAll(order, headerRefIdxFilter)
 		if err != nil {
 			return nil, err
 		}

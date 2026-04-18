@@ -127,16 +127,16 @@ func (s TwoPhasesStore) Get(uid bucket.BucketUid) (*bucket.Bucket, error) {
 	return b, err
 }
 
-func (s TwoPhasesStore) Filter(o idx.Order, f idx.Filter, pageSize, preloadPageCount int) (idx.Paginer[bucket.BucketUid, *bucket.Bucket], error) {
-	pe, err := s.ephemeral.Filter(o, f, pageSize, preloadPageCount)
+func (s TwoPhasesStore) Filter(sort bucket.Sort, c bucket.Criteria, pageSize, preloadPageCount int) (idx.Paginer[bucket.BucketUid, *bucket.Bucket], error) {
+	pe, err := s.ephemeral.Filter(sort, c, pageSize, preloadPageCount)
 	if err != nil {
 		return nil, err
 	}
-	pr, err := s.rested.Filter(o, f, pageSize, preloadPageCount)
+	pr, err := s.rested.Filter(sort, c, pageSize, preloadPageCount)
 	if err != nil {
 		return nil, err
 	}
 
 	// TODO: need to apply a distinct filter to not list same bucket from ephemeral & stored.
-	return idx.CatPaginers(idx.EntryTimeCompare[bucket.BucketUid, *bucket.Bucket](o), pageSize, preloadPageCount, pe, pr), nil
+	return idx.CatPaginers(idx.EntryTimeCompare[bucket.BucketUid, *bucket.Bucket](idx.TopToBottom), pageSize, preloadPageCount, pe, pr), nil
 }
