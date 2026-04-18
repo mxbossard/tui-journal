@@ -864,6 +864,7 @@ func TestBucketService_Filter(t *testing.T) {
 	}
 	assert.Equal(t, 3, k)
 
+	panic("not implemented yet")
 	// Between day2 and day5 there is bkt3 & bkt4 created, bkt1 updated
 	pgnr2, err := svc.Filter(idx.TopToBottom, idx.BetweenFilter(*day2, *day5), 1, 1)
 	assert.NoError(t, err)

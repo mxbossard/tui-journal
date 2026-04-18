@@ -66,7 +66,7 @@ type Service interface {
 	Get(uid BucketUid) (*Bucket, error)
 	// Get a slice of Buckets
 	// FIXME: filter on which terms ? CANNOT reuse idx filters and use it on all bucket indexes.
-	Filter(o Order, f Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
+	Filter(o Sorting, f Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
 	// Save a Bucket
 	Save(b *Bucket, partition string) error
 	// Export all layers of a bucket
@@ -148,7 +148,7 @@ func (s *bucketService) addHeader(partition string, state idx.State, h *Header) 
 	return hrEntry, nil
 }
 
-func (s *bucketService) addLayer(partition string, state idx.State, t time.Time, uid BucketUid, m *Metadata, d []byte) (idx.Entry[BucketUid, *BucketRef], error) {
+func (s *bucketService) addLayer(partition string, state idx.State, uid BucketUid, m *Metadata, d []byte) (idx.Entry[BucketUid, *BucketRef], error) {
 	// Store metadata & data
 	layerRef, err := storeLayerData(s.dir, partition, d)
 	if err != nil {
@@ -168,7 +168,7 @@ func (s *bucketService) addLayer(partition string, state idx.State, t time.Time,
 	if err != nil {
 		return nil, err
 	}
-	brEntry, err := bucketRefIdx.Add(state, t, uid, &bucketRef)
+	brEntry, err := bucketRefIdx.Add(state, *m.Updated, uid, &bucketRef)
 	if err != nil {
 		return nil, fmt.Errorf("unable to add bucket ref: %w", err)
 	}
@@ -215,11 +215,12 @@ func (s *bucketService) create(b *Bucket, partition string) error {
 
 	// TODO: 3- store Layer & Metadata
 	metadata := Metadata{
+		Uid:     b.Header.Uid,
 		Version: FirstLayerVersion,
 		Size:    dataLen,
 		Updated: b.Header.Created,
 	}
-	brEntry, err := s.addLayer(partition, RootLayerState, *b.Header.Created, b.Header.Uid, &metadata, data)
+	brEntry, err := s.addLayer(partition, RootLayerState, b.Header.Uid, &metadata, data)
 	if err != nil {
 		return fmt.Errorf("create: unable to add Layer: %w", err)
 	}
@@ -297,6 +298,7 @@ func (s *bucketService) update(b *Bucket, partition string) error {
 	}
 
 	newMetadata := &Metadata{
+		Uid:     b.Header.Uid,
 		Version: b.Metadata.Version + 1,
 		Size:    dataLen,
 		Updated: &now,
@@ -322,7 +324,7 @@ func (s *bucketService) update(b *Bucket, partition string) error {
 		layerState = DiffLayerState
 	}
 
-	brEntry, err := s.addLayer(partition, layerState, *b.Header.Created, b.Header.Uid, newMetadata, data)
+	brEntry, err := s.addLayer(partition, layerState, b.Header.Uid, newMetadata, data)
 	if err != nil {
 		return fmt.Errorf("update: unable to add Layer: %w", err)
 	}
@@ -445,7 +447,8 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 	return s.buildLazyBucket(lastHeaderAllParts)
 }
 
-func (s *bucketService) Filter(o Order, f Filter, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {
+func (s *bucketService) Filter(o Sorting, c Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {
+	// FIXME: SHOULD order partitons using supplied Order
 	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
 		return nil, err
@@ -458,9 +461,61 @@ func (s *bucketService) Filter(o Order, f Filter, pageSize, preloadPageCount int
 			return nil, err
 		}
 
+		bucketNameIdx, err := getBucketNameIndex(s.dir, s.salt, partition)
+		if err != nil {
+			return nil, err
+		}
+
 		// Build a paginer of matching Buckets
 		// The paginer lazy load buckets
 		// panic("not implemented yet")
+
+		// TODO: Filtering
+		// - BucketUID filter => Need to scan headerRefIdx key where BucketUID is maintained.
+		// - Bucket state filter => Need to scan headerRefIdx state where bucket state is maintained.
+		// - Bucket name filter => Need to scan bucketNameIdx to get matching BucketUID THEN filter by BucketUID.
+		// - Bucket creationTime filter => Need to scan headerRefIdx time where creationTime is indexed
+		// 		THEN thin filter on Header.Created time
+		// - Bucket updateTime filter => Need to scan bucketRefIdx time where bucket updateTime is indexed
+		// 		THEN thin filter on Metadata.Updated time THEN filter by BucketUID stored in Metadata
+
+		headerRefIdxFilter := idx.NewFilter()
+		bucketNameIdxFilter := idx.NewFilter()
+		bucketRefIdxFilter := idx.NewFilter()
+		if c.MatchingUids() != nil {
+			kf, err := headerRefIdx.KeysFilter(false, c.MatchingUids()...)
+			if err != nil {
+				return nil, err
+			}
+			headerRefIdxFilter.Add(kf)
+		}
+
+		if c.BucketStateMatcher() != nil {
+			f := idx.StateFilter(func(s idx.State) (bool, bool) {
+				matcher := c.BucketStateMatcher()
+				ok := matcher(State(s))
+				return ok, true
+			})
+			headerRefIdxFilter.Add(f)
+		}
+
+		if c.BucketNameMatcher() != nil {
+			kf, err := bucketNameIdx.KeysFilter(false, c.MatchingNames()...)
+			if err != nil {
+				return nil, err
+			}
+			bucketNameIdxFilter.Add(kf)
+		}
+
+		if c.CreationTimeMatcher() != nil {
+			// HOWTO build a filter from time criteria ?
+		}
+
+		if c.UpdateTimeMatcher() != nil {
+
+		}
+
+		panic("not implemented yet")
 
 		// 1- Get a paginer of matching Bucket headers
 		headerPgnr, err := headerRefIdx.FilterAll(o, f)

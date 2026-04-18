@@ -12,7 +12,7 @@
 - [_] Add idx export / import unittests (especially with hashed keys)
 - [x] Add Bucket Service Export / Import (without squashing for now)
 - [x] Add idx KeyFiltering the right way (working with GlidingHasher or not, with key or bytesKey)
-- [_] Fix Bucket service filtering (cannot use same filtering than idx) 
+- [_] Bucket Criteria & Sorting => Fix Bucket service filtering (cannot use same filtering than idx) 
       - Need smarter filtering : (if one layer is found all the bucket must be loaded) 
       - On which terms filter ? times (creation, update), bucket states, bucket names ?, bucket uids ?
       - Ordering on time : YoungerFirst / OlderFirst

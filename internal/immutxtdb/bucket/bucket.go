@@ -48,6 +48,7 @@ func NewLabels(labels ...string) Labels {
 
 // Store Layer Metadata
 type Metadata struct {
+	Uid     BucketUid
 	Version Version
 	Updated *time.Time
 	Size    int

@@ -112,7 +112,7 @@ func (s *bucketService) Import(export *BucketExport, partition string) error {
 
 	// 3- Store All Layers & Metadatas
 	for _, l := range export.layers {
-		_, err := s.addLayer(partition, l.State, *l.Metadata.Updated, b.Header.Uid, l.Metadata, l.Content)
+		_, err := s.addLayer(partition, l.State, b.Header.Uid, l.Metadata, l.Content)
 		if err != nil {
 			return fmt.Errorf("create: unable to add Layer: %w", err)
 		}
