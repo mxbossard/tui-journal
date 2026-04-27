@@ -68,7 +68,7 @@ type Service interface {
 	// FIXME: filter on which terms ? CANNOT reuse idx filters and use it on all bucket indexes.
 	Filter(o Sort, f Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
 	// Save a Bucket
-	Save(b *Bucket, partition string) error
+	Save(b *Bucket, partition string, t ...time.Time) error
 	// Export all layers of a bucket
 	Export(uid BucketUid, headerHist, dataHist, squash bool) (*BucketExport, error)
 	// Import an Exported Bucket in the service
@@ -176,11 +176,12 @@ func (s *bucketService) addLayer(partition string, state idx.State, uid BucketUi
 	return brEntry, nil
 }
 
-func (s *bucketService) create(b *Bucket, partition string) error {
-	if b.Header.Created == nil {
-		now := time.Now()
-		b.Header.Created = &now
-	}
+func (s *bucketService) create(b *Bucket, partition string, t time.Time) error {
+	b.Header.Created = &t
+	// if b.Header.Created == nil {
+	// 	now := time.Now()
+	// 	b.Header.Created = &time
+	// }
 
 	var data []byte
 	var dataLen int
@@ -242,8 +243,8 @@ func (s *bucketService) create(b *Bucket, partition string) error {
 	return nil
 }
 
-func (s *bucketService) update(b *Bucket, partition string) error {
-	now := time.Now()
+func (s *bucketService) update(b *Bucket, partition string, t time.Time) error {
+	// now := time.Now()
 
 	// TODO: 1- Attempt to make a patch of the update.
 	var rootLayer, diffLayer bool
@@ -285,14 +286,10 @@ func (s *bucketService) update(b *Bucket, partition string) error {
 			// Diff bigger than raw data => store a root layer
 			rootLayer = true
 			data = zipedFullText
-			// TODO
-			// panic("not implemented yet")
 		} else {
 			// Store a diff layer
 			diffLayer = true
 			data = zipedPatch
-			// TODO
-			// panic("not implemented yet")
 		}
 		dataLen = len(b.stringData)
 	}
@@ -301,12 +298,12 @@ func (s *bucketService) update(b *Bucket, partition string) error {
 		Uid:     b.Header.Uid,
 		Version: b.Metadata.Version + 1,
 		Size:    dataLen,
-		Updated: &now,
+		Updated: &t,
 	}
 
 	// TODO: 2- Add (RhUid, headerRef) in headerRef Idx if Header changed
 	if b.Header.changed {
-		b.Header.Modified = &now
+		b.Header.Modified = &t
 
 		entry, err := s.addHeader(partition, dummyState, &b.Header)
 		if err != nil {
@@ -345,7 +342,7 @@ func (s *bucketService) update(b *Bucket, partition string) error {
 	return nil
 }
 
-func (s *bucketService) Save(b *Bucket, partition string) error {
+func (s *bucketService) Save(b *Bucket, partition string, t ...time.Time) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
@@ -353,11 +350,20 @@ func (s *bucketService) Save(b *Bucket, partition string) error {
 		return nil
 	}
 
+	var operationTime time.Time
+	if len(t) > 1 {
+		panic("must supply only one time param")
+	} else if len(t) == 1 {
+		operationTime = t[0]
+	} else {
+		operationTime = time.Now()
+	}
+
 	// 1- Check if supplied bucket already exists
 	if b.Metadata == nil {
-		return s.create(b, partition)
+		return s.create(b, partition, operationTime)
 	}
-	return s.update(b, partition)
+	return s.update(b, partition, operationTime)
 }
 
 func (s *bucketService) buildLazyBucket(lastHeader *Header) (*Bucket, error) {
