@@ -490,6 +490,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 		// 		THEN thin filter on Metadata.Updated time THEN filter by BucketUID stored in Metadata
 
 		// 1- If Name criteria resolve corresponding BucketUids
+		var uidsCriteria []BucketUid
 		var uidsFromNamesCriteria []BucketUid
 		if c.BucketNameMatcher() != nil {
 			kf, err := bucketNameIdx.KeysFilter(false, c.MatchingNames()...)
@@ -538,12 +539,20 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 		// 2- If BucketUid criteria Merge with uidsFromNamesCriteria
 		headerRefIdxFilter := idx.NewFilter()
 		if c.MatchingUids() != nil {
-			uidsFromNamesCriteria = append(uidsFromNamesCriteria, c.MatchingUids()...)
-			uidsFromNamesCriteria = append(uidsFromNamesCriteria, uidsFromUpdateTimeCriteria...)
-			kf, err := headerRefIdx.KeysFilter(false, uidsFromNamesCriteria...)
+			uidsCriteria = append(uidsCriteria, c.MatchingUids()...)
+		}
+		if len(uidsFromNamesCriteria) > 0 {
+			uidsCriteria = append(uidsCriteria, uidsFromNamesCriteria...)
+		}
+		if len(uidsFromUpdateTimeCriteria) > 0 {
+			uidsCriteria = append(uidsCriteria, uidsFromUpdateTimeCriteria...)
+		}
+		if len(uidsCriteria) > 0 {
+			kf, err := headerRefIdx.KeysFilter(false, uidsCriteria...)
 			if err != nil {
 				return nil, err
 			}
+			fmt.Printf("Filtering on uids: %v\n", uidsCriteria)
 			headerRefIdxFilter.Add(kf)
 		}
 
@@ -601,7 +610,9 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 				// lastBucketHashedUid := HashedBucketUid(headerEntry.KeyBytes())
 				b, err := s.buildLazyBucket(lastHeader)
 				builtBuckets[headerEntry.Key()] = b
-				if !push(idx.NewEntry(headerEntry.Key(), b, headerEntry.Seq(), headerEntry.Time(), headerEntry.State(), err, headerEntry.KeyBytes())) {
+				e := idx.NewEntry(headerEntry.Key(), b, headerEntry.Seq(), headerEntry.Time(), headerEntry.State(), err, headerEntry.KeyBytes())
+				fmt.Printf("pushing entry #%d of part: %s\n", headerEntry.Seq(), partition)
+				if !push(e) {
 					break
 				}
 			}
@@ -616,6 +627,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 	iterator := iterz.Merge(compare, paginers...)
 	paginer := idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
 		for i := range iterator {
+			fmt.Printf("merging entry for buid: %v\n", i)
 			if !push(i) {
 				return
 			}

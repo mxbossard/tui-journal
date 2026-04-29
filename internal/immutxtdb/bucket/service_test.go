@@ -1,6 +1,7 @@
 package bucket
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -987,13 +988,35 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	}
 	assert.Equal(t, 4, k)
 
-	// Between day2 and day5 there is bkt3 & bkt4 created, bkt1 updated
-	pgnr2, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day2, *day5), 1, 1)
+	// Between day1 and day5 there is bkt2, bkt3 & bkt4 created, bkt1 updated
+	pgnr2, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day1, *day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr2)
 
 	k = 0
-	for b := range pgnr.All() {
+	for b := range pgnr2.All() {
+		switch k {
+		case 0:
+			assert.Equal(t, expectedName2, b.Val().Header.Name)
+		case 1:
+			assert.Equal(t, expectedName1, b.Val().Header.Name)
+		case 2:
+			assert.Equal(t, expectedName3, b.Val().Header.Name)
+		case 3:
+			assert.Equal(t, expectedName4, b.Val().Header.Name)
+		}
+		k++
+	}
+	assert.Equal(t, 4, k)
+
+	fmt.Printf("-------START--------\n")
+	// Between day2 and day5 there is bkt3 & bkt4 created, bkt1 updated
+	pgnr3, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day2, *day5), 1, 1)
+	assert.NoError(t, err)
+	require.NotNil(t, pgnr3)
+
+	k = 0
+	for b := range pgnr3.All() {
 		switch k {
 		case 0:
 			assert.Equal(t, expectedName1, b.Val().Header.Name)
@@ -1005,4 +1028,5 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 		k++
 	}
 	assert.Equal(t, 3, k)
+	fmt.Printf("-------END--------\n")
 }
