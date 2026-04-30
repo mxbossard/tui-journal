@@ -1,7 +1,6 @@
 package bucket
 
 import (
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -864,11 +863,30 @@ func TestBucketService_Filter(t *testing.T) {
 	}
 	assert.Equal(t, 3, k)
 
-	// Between day2 and day5 there is bkt3 & bkt4 created
-	pgnr2, err := svc.Filter(OlderFirst, CreatedBetweenCriterion(*day2, *day5), 1, 1)
+	// Reverse order
+	pgnr2, err := svc.Filter(YoungerFirst, CreatedBetweenCriterion(*day1, *day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr2)
-	entries := iterz.Flatten(pgnr2.All())
+
+	k = 0
+	for b := range pgnr2.All() {
+		switch k {
+		case 0:
+			assert.Equal(t, expectedName4, b.Val().Header.Name)
+		case 1:
+			assert.Equal(t, expectedName3, b.Val().Header.Name)
+		case 2:
+			assert.Equal(t, expectedName2, b.Val().Header.Name)
+		}
+		k++
+	}
+	assert.Equal(t, 3, k)
+
+	// Between day2 and day5 there is bkt3 & bkt4 created
+	pgnr3, err := svc.Filter(OlderFirst, CreatedBetweenCriterion(*day2, *day5), 1, 1)
+	assert.NoError(t, err)
+	require.NotNil(t, pgnr3)
+	entries := iterz.Flatten(pgnr3.All())
 	require.NotNil(t, entries)
 
 	// Check first bkt is bkt3
@@ -967,7 +985,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	err = svc.Save(bkt4, expectedPart3, *day5)
 	assert.NoError(t, err)
 
-	// Between day1 and day5 there is bkt2, bkt3 & bkt4 created, bkt1 updated
+	// Between day1 and day5 there is bkt2, bkt3 & bkt4 created, bkt1 updated (on day 3)
 	pgnr, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day1, *day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr)
@@ -978,6 +996,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 		case 0:
 			assert.Equal(t, expectedName2, b.Val().Header.Name)
 		case 1:
+			// Bkt1 before Bkt3 because part ordered before part 3
 			assert.Equal(t, expectedName1, b.Val().Header.Name)
 		case 2:
 			assert.Equal(t, expectedName3, b.Val().Header.Name)
@@ -988,7 +1007,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	}
 	assert.Equal(t, 4, k)
 
-	// Between day1 and day5 there is bkt2, bkt3 & bkt4 created, bkt1 updated
+	// Repeat to check consistency
 	pgnr2, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day1, *day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr2)
@@ -999,6 +1018,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 		case 0:
 			assert.Equal(t, expectedName2, b.Val().Header.Name)
 		case 1:
+			// Bkt1 before Bkt3 because part ordered before part 3
 			assert.Equal(t, expectedName1, b.Val().Header.Name)
 		case 2:
 			assert.Equal(t, expectedName3, b.Val().Header.Name)
@@ -1009,7 +1029,6 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	}
 	assert.Equal(t, 4, k)
 
-	fmt.Printf("-------START--------\n")
 	// Between day2 and day5 there is bkt3 & bkt4 created, bkt1 updated
 	pgnr3, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day2, *day5), 1, 1)
 	assert.NoError(t, err)
@@ -1019,6 +1038,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	for b := range pgnr3.All() {
 		switch k {
 		case 0:
+			// Bkt1 before Bkt3 because part ordered before part 3
 			assert.Equal(t, expectedName1, b.Val().Header.Name)
 		case 1:
 			assert.Equal(t, expectedName3, b.Val().Header.Name)
@@ -1028,5 +1048,24 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 		k++
 	}
 	assert.Equal(t, 3, k)
-	fmt.Printf("-------END--------\n")
+
+	// Reverse order
+	pgnr4, err := svc.Filter(YoungerFirst, UpdatedBetweenCriterion(*day2, *day5), 1, 1)
+	assert.NoError(t, err)
+	require.NotNil(t, pgnr4)
+
+	k = 0
+	for b := range pgnr4.All() {
+		switch k {
+		case 0:
+			assert.Equal(t, expectedName4, b.Val().Header.Name)
+		case 1:
+			// Bkt1 before Bkt3 because part ordered before part 3
+			assert.Equal(t, expectedName1, b.Val().Header.Name)
+		case 2:
+			assert.Equal(t, expectedName3, b.Val().Header.Name)
+		}
+		k++
+	}
+	assert.Equal(t, 3, k)
 }

@@ -490,9 +490,11 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 		// 		THEN thin filter on Metadata.Updated time THEN filter by BucketUID stored in Metadata
 
 		// 1- If Name criteria resolve corresponding BucketUids
+		uidCriteriaMandatory := false
 		var uidsCriteria []BucketUid
 		var uidsFromNamesCriteria []BucketUid
 		if c.BucketNameMatcher() != nil {
+			uidCriteriaMandatory = true
 			kf, err := bucketNameIdx.KeysFilter(false, c.MatchingNames()...)
 			if err != nil {
 				return nil, err
@@ -507,12 +509,13 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 				}
 				uidsFromNamesCriteria = append(uidsFromNamesCriteria, e.Val())
 			}
-			fmt.Printf("Found uids from names: %v\n", uidsFromNamesCriteria)
+			// fmt.Printf("Found uids from names: %v\n", uidsFromNamesCriteria)
 		}
 
 		// 2- If UpdateTime criteria resolve corresponding BucketUids
 		var uidsFromUpdateTimeCriteria []BucketUid
 		if c.UpdateTimeMatcher() != nil {
+			uidCriteriaMandatory = true
 			tf := idx.TimeFilter(func(t time.Time) (bool, bool) {
 				matcher := c.UpdateTimeMatcher()
 				ok := matcher(t)
@@ -533,7 +536,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 				}
 				uidsFromUpdateTimeCriteria = append(uidsFromUpdateTimeCriteria, metadata.Uid)
 			}
-			fmt.Printf("Found uids from updateTimes: %v\n", uidsFromUpdateTimeCriteria)
+			// fmt.Printf("Found uids from updateTimes: %v\n", uidsFromUpdateTimeCriteria)
 		}
 
 		// 2- If BucketUid criteria Merge with uidsFromNamesCriteria
@@ -552,8 +555,11 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 			if err != nil {
 				return nil, err
 			}
-			fmt.Printf("Filtering on uids: %v\n", uidsCriteria)
+			// fmt.Printf("Filtering on uids: %v [part: %s]\n", uidsCriteria, partition)
 			headerRefIdxFilter.Add(kf)
+		} else if uidCriteriaMandatory {
+			// No matching uid but mandatory => no bucket matching
+			continue
 		}
 
 		// 3- If State criteria add it to headerRefIdxFilter
@@ -611,7 +617,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 				b, err := s.buildLazyBucket(lastHeader)
 				builtBuckets[headerEntry.Key()] = b
 				e := idx.NewEntry(headerEntry.Key(), b, headerEntry.Seq(), headerEntry.Time(), headerEntry.State(), err, headerEntry.KeyBytes())
-				fmt.Printf("pushing entry #%d of part: %s\n", headerEntry.Seq(), partition)
+				// fmt.Printf("pushing entry #%d of part: %s\n", headerEntry.Seq(), partition)
 				if !push(e) {
 					break
 				}
@@ -622,12 +628,16 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 
 	compare := func(a, b idx.Entry[BucketUid, *Bucket]) int {
 		// Ordered by time & partition
-		return cmp.Compare(a.Val().Metadata.Updated.UnixMilli(), b.Val().Metadata.Updated.UnixMilli())
+		i := cmp.Compare(a.Val().Metadata.Updated.UnixMilli(), b.Val().Metadata.Updated.UnixMilli())
+		if sort == YoungerFirst {
+			i = -i
+		}
+		return i
 	}
 	iterator := iterz.Merge(compare, paginers...)
 	paginer := idx.NewPaginer(pageSize, preloadPageCount, func(push func(e idx.Entry[BucketUid, *Bucket]) bool) {
 		for i := range iterator {
-			fmt.Printf("merging entry for buid: %v\n", i)
+			// fmt.Printf("merging entry for buid: %v\n", i)
 			if !push(i) {
 				return
 			}
