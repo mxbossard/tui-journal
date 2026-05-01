@@ -9,7 +9,6 @@
 - [x] Add Bucket.Layers(version)
 - [x] Add Bucket.Project(version)
 - [x] Keep state of last version loaded in case of successive loading ?
-- [_] Add idx export / import unittests (especially with hashed keys)
 - [x] Add Bucket Service Export / Import (without squashing for now)
 - [x] Add idx KeyFiltering the right way (working with GlidingHasher or not, with key or bytesKey)
 - [x] Bucket Criteria & Sorting => Fix Bucket service filtering (cannot use same filtering than idx) 
@@ -17,10 +16,15 @@
       - On which terms filter ? times (creation, update), bucket states, bucket names ?, bucket uids ?
       - Ordering on time : YoungerFirst / OlderFirst
 - [_] Implem Two Phases store first version
-      - Supply time to Save a bucket ?
+      - [x] Supply time optionnaly to Save a bucket
+      - [_] Test Commit()
+      - [_] Test Names()
+      - [_] Manage Commited buckets + Update Merge
+
 - [_] For now use a Symbolic Zip & Encrypt methode: "Zip[<DATA>] ; Encrypt[<DATA>] for test purpose.
 - [_] Add Store / Service Snapshot() HOW ?
 - [x] Idx Concatenation
+- [_] Add idx export / import unittests (especially with hashed keys)
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
 - [x] Implement RotatingHash, who's responsability ?
@@ -35,6 +39,7 @@
 - [_] Bucket hiding : like a delete but data are kept
 - [_] Bucket "history" : show a history of the bucket
 - [_] Idx Entry Hiding
+- [_] Improve time filtering with more precise filtering ? Where do this filtering ? Bucket service level ? Store level ?
 
 
 ## Purpose

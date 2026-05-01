@@ -14,12 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func dayTime(value string) *time.Time {
+func dayTime(value string) time.Time {
 	t, err := time.Parse("2006-01-02", value)
 	if err != nil {
 		panic(err)
 	}
-	return &t
+	return t
 }
 
 func Test_NewBucketService(t *testing.T) {
@@ -73,7 +73,7 @@ func TestBucketService_Save(t *testing.T) {
 
 	before2 := time.Now()
 
-	err = bkt.UpdateText(expectedMsg)
+	err = bkt.SetText(expectedMsg)
 	assert.NoError(t, err)
 
 	before3 := time.Now()
@@ -154,7 +154,7 @@ func TestBucketService_Save_Then_Get(t *testing.T) {
 	bkt1 := svc.New(expectedName, expectedLabels)
 	assert.NotNil(t, bkt1)
 
-	err = bkt1.UpdateText(expectedMsg)
+	err = bkt1.SetText(expectedMsg)
 	assert.NoError(t, err)
 
 	before := time.Now()
@@ -244,21 +244,21 @@ func TestBucketService_Names(t *testing.T) {
 	// Make some buckets
 	bkt1 := svc.New(expectedName1, expectedLabels)
 	assert.NotNil(t, bkt1)
-	err = bkt1.UpdateText(expectedMsg1)
+	err = bkt1.SetText(expectedMsg1)
 	assert.NoError(t, err)
 	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
 	bkt2 := svc.New(expectedName2, expectedLabels)
 	assert.NotNil(t, bkt2)
-	err = bkt2.UpdateText(expectedMsg2)
+	err = bkt2.SetText(expectedMsg2)
 	assert.NoError(t, err)
 	err = svc.Save(bkt2, expectedPartition)
 	assert.NoError(t, err)
 
 	bkt3 := svc.New(expectedName3, expectedLabels)
 	assert.NotNil(t, bkt3)
-	err = bkt3.UpdateText(expectedMsg3)
+	err = bkt3.SetText(expectedMsg3)
 	assert.NoError(t, err)
 	err = svc.Save(bkt3, expectedPartition)
 	assert.NoError(t, err)
@@ -301,28 +301,28 @@ func TestBucketService_Names_Multipart(t *testing.T) {
 	// Make some buckets
 	bkt1 := svc.New(expectedName1, expectedLabels)
 	assert.NotNil(t, bkt1)
-	err = bkt1.UpdateText(expectedMsg1)
+	err = bkt1.SetText(expectedMsg1)
 	assert.NoError(t, err)
 	err = svc.Save(bkt1, expectedPart1)
 	assert.NoError(t, err)
 
 	bkt2 := svc.New(expectedName2, expectedLabels)
 	assert.NotNil(t, bkt2)
-	err = bkt2.UpdateText(expectedMsg2)
+	err = bkt2.SetText(expectedMsg2)
 	assert.NoError(t, err)
 	err = svc.Save(bkt2, expectedPart2)
 	assert.NoError(t, err)
 
 	bkt3 := svc.New(expectedName3, expectedLabels)
 	assert.NotNil(t, bkt3)
-	err = bkt3.UpdateText(expectedMsg3)
+	err = bkt3.SetText(expectedMsg3)
 	assert.NoError(t, err)
 	err = svc.Save(bkt3, expectedPart3)
 	assert.NoError(t, err)
 
 	bkt4 := svc.New(expectedName4, expectedLabels)
 	assert.NotNil(t, bkt4)
-	err = bkt4.UpdateText(expectedMsg4)
+	err = bkt4.SetText(expectedMsg4)
 	assert.NoError(t, err)
 	err = svc.Save(bkt4, expectedPart4)
 	assert.NoError(t, err)
@@ -358,7 +358,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.NotNil(t, bkt1)
 
 	// First write
-	err = bkt1.UpdateText(expectedMsg1)
+	err = bkt1.SetText(expectedMsg1)
 	assert.NoError(t, err)
 
 	before1 := time.Now()
@@ -379,7 +379,7 @@ func TestBucketService_Save_Edit_Save_Get(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg1, text)
 
-	err = bkt1.UpdateText(expectedMsg2)
+	err = bkt1.SetText(expectedMsg2)
 	assert.NoError(t, err)
 
 	// Second write
@@ -510,22 +510,22 @@ func TestBucketService_ProjectText(t *testing.T) {
 	assert.NotNil(t, bkt1)
 
 	// First write
-	err = bkt1.UpdateText(expectedMsg1)
+	err = bkt1.SetText(expectedMsg1)
 	assert.NoError(t, err)
 	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
-	err = bkt1.UpdateText(expectedMsg2)
+	err = bkt1.SetText(expectedMsg2)
 	assert.NoError(t, err)
 	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
-	err = bkt1.UpdateText(expectedMsg3)
+	err = bkt1.SetText(expectedMsg3)
 	assert.NoError(t, err)
 	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
 
-	err = bkt1.UpdateText(expectedMsg4)
+	err = bkt1.SetText(expectedMsg4)
 	assert.NoError(t, err)
 	err = svc.Save(bkt1, expectedPartition)
 	assert.NoError(t, err)
@@ -580,7 +580,7 @@ func TestBucketService_EditMultiParts_Then_Get(t *testing.T) {
 	assert.Nil(t, bkt1.Metadata)
 
 	// First Save in bkt1
-	err = bkt1.UpdateText(expectedMsg1)
+	err = bkt1.SetText(expectedMsg1)
 	assert.NoError(t, err)
 
 	assert.Nil(t, bkt1.Metadata)
@@ -593,7 +593,7 @@ func TestBucketService_EditMultiParts_Then_Get(t *testing.T) {
 	assert.Equal(t, Version(1), bkt1.Metadata.Version)
 
 	// Second save in same bkt1
-	err = bkt1.UpdateText(expectedMsg2)
+	err = bkt1.SetText(expectedMsg2)
 	assert.NoError(t, err)
 	before2 := time.Now()
 
@@ -644,7 +644,7 @@ func TestBucketService_EditMultiParts_Then_Get(t *testing.T) {
 	bkt2, err := svc.Get(bkt1.Header.Uid)
 	assert.NoError(t, err)
 	require.NotNil(t, bkt2)
-	err = bkt2.UpdateText(expectedMsg3)
+	err = bkt2.SetText(expectedMsg3)
 	assert.NoError(t, err)
 	before3 := time.Now()
 	err = svc.Save(bkt2, expectedPartition3)
@@ -794,8 +794,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt1)
 	day1 := dayTime("2026-03-01")
-	// bkt1.Header.Created = day1
-	err = svc.Save(bkt1, expectedPartition, *day1)
+	err = svc.Save(bkt1, expectedPartition, day1)
 	assert.NoError(t, err)
 
 	// Day 2: create bkt2
@@ -803,8 +802,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt2)
 	day2 := dayTime("2026-03-02")
-	// bkt2.Header.Created = day2
-	err = svc.Save(bkt2, expectedPartition, *day2)
+	err = svc.Save(bkt2, expectedPartition, day2)
 	assert.NoError(t, err)
 
 	// Day 3: create bkt3
@@ -812,13 +810,17 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt3)
 	day3 := dayTime("2026-03-03")
-	// bkt3.Header.Created = day3
-	err = svc.Save(bkt3, expectedPartition, *day3)
+	err = svc.Save(bkt3, expectedPartition, day3)
 	assert.NoError(t, err)
 
 	// Update bkt1
-	bkt1.UpdateText(expectedMsg1 + "updated")
-	err = svc.Save(bkt1, expectedPartition, *day3)
+	bkt1.SetText(expectedMsg1 + "updated")
+	err = svc.Save(bkt1, expectedPartition, day3)
+	assert.NoError(t, err)
+
+	// Update bkt2
+	bkt2.SetText(expectedMsg2 + "updated")
+	err = svc.Save(bkt2, expectedPartition, day3)
 	assert.NoError(t, err)
 
 	// Day 4: create bkt4
@@ -826,8 +828,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt4)
 	day4 := dayTime("2026-03-04")
-	// bkt4.Header.Created = day4
-	err = svc.Save(bkt4, expectedPartition, *day4)
+	err = svc.Save(bkt4, expectedPartition, day4)
 	assert.NoError(t, err)
 
 	// Day 5: create bkt5
@@ -835,17 +836,16 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt5)
 	day5 := dayTime("2026-03-05")
-	// bkt5.Header.Created = day5
-	err = svc.Save(bkt5, expectedPartition, *day5)
+	err = svc.Save(bkt5, expectedPartition, day5)
 	assert.NoError(t, err)
 
 	// Update bkt4
-	bkt4.UpdateText(expectedMsg4 + "updated")
-	err = svc.Save(bkt4, expectedPartition, *day5)
+	bkt4.SetText(expectedMsg4 + "updated")
+	err = svc.Save(bkt4, expectedPartition, day5)
 	assert.NoError(t, err)
 
 	// Between day1 and day5 there is bkt2, bkt3 & bkt4 created
-	pgnr, err := svc.Filter(OlderFirst, CreatedBetweenCriterion(*day1, *day5), 1, 1)
+	pgnr, err := svc.Filter(OlderFirst, CreatedBetweenCriterion(day1, day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr)
 
@@ -864,7 +864,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.Equal(t, 3, k)
 
 	// Reverse order
-	pgnr2, err := svc.Filter(YoungerFirst, CreatedBetweenCriterion(*day1, *day5), 1, 1)
+	pgnr2, err := svc.Filter(YoungerFirst, CreatedBetweenCriterion(day1, day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr2)
 
@@ -883,7 +883,7 @@ func TestBucketService_Filter(t *testing.T) {
 	assert.Equal(t, 3, k)
 
 	// Between day2 and day5 there is bkt3 & bkt4 created
-	pgnr3, err := svc.Filter(OlderFirst, CreatedBetweenCriterion(*day2, *day5), 1, 1)
+	pgnr3, err := svc.Filter(OlderFirst, CreatedBetweenCriterion(day2, day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr3)
 	entries := iterz.Flatten(pgnr3.All())
@@ -935,8 +935,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt1)
 	day1 := dayTime("2026-03-01")
-	// bkt1.Header.Created = day1
-	err = svc.Save(bkt1, expectedPart1, *day1)
+	err = svc.Save(bkt1, expectedPart1, day1)
 	assert.NoError(t, err)
 
 	// Day2: create bkt2
@@ -944,8 +943,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt2)
 	day2 := dayTime("2026-03-02")
-	// bkt2.Header.Created = day2
-	err = svc.Save(bkt2, expectedPart2, *day2)
+	err = svc.Save(bkt2, expectedPart2, day2)
 	assert.NoError(t, err)
 
 	// Day3: create bkt3
@@ -953,13 +951,12 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt3)
 	day3 := dayTime("2026-03-03")
-	// bkt3.Header.Created = day3
-	err = svc.Save(bkt3, expectedPart3, *day3)
+	err = svc.Save(bkt3, expectedPart3, day3)
 	assert.NoError(t, err)
 
 	// Update bkt1
-	bkt1.UpdateText(expectedMsg1 + "updated")
-	err = svc.Save(bkt1, expectedPart1, *day3)
+	bkt1.SetText(expectedMsg1 + "updated")
+	err = svc.Save(bkt1, expectedPart1, day3)
 	assert.NoError(t, err)
 
 	// Day4: create bkt4
@@ -967,8 +964,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt4)
 	day4 := dayTime("2026-03-04")
-	// bkt4.Header.Created = day4
-	err = svc.Save(bkt4, expectedPart1, *day4)
+	err = svc.Save(bkt4, expectedPart1, day4)
 	assert.NoError(t, err)
 
 	// Day5: create bkt5
@@ -976,17 +972,16 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, bkt5)
 	day5 := dayTime("2026-03-05")
-	// bkt5.Header.Created = day5
-	err = svc.Save(bkt5, expectedPart2, *day5)
+	err = svc.Save(bkt5, expectedPart2, day5)
 	assert.NoError(t, err)
 
 	// Update bkt4
-	bkt4.UpdateText(expectedMsg4 + "updated")
-	err = svc.Save(bkt4, expectedPart3, *day5)
+	bkt4.SetText(expectedMsg4 + "updated")
+	err = svc.Save(bkt4, expectedPart3, day5)
 	assert.NoError(t, err)
 
 	// Between day1 and day5 there is bkt2, bkt3 & bkt4 created, bkt1 updated (on day 3)
-	pgnr, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day1, *day5), 1, 1)
+	pgnr, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(day1, day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr)
 
@@ -1008,7 +1003,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	assert.Equal(t, 4, k)
 
 	// Repeat to check consistency
-	pgnr2, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day1, *day5), 1, 1)
+	pgnr2, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(day1, day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr2)
 
@@ -1030,7 +1025,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	assert.Equal(t, 4, k)
 
 	// Between day2 and day5 there is bkt3 & bkt4 created, bkt1 updated
-	pgnr3, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(*day2, *day5), 1, 1)
+	pgnr3, err := svc.Filter(OlderFirst, UpdatedBetweenCriterion(day2, day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr3)
 
@@ -1050,7 +1045,7 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	assert.Equal(t, 3, k)
 
 	// Reverse order
-	pgnr4, err := svc.Filter(YoungerFirst, UpdatedBetweenCriterion(*day2, *day5), 1, 1)
+	pgnr4, err := svc.Filter(YoungerFirst, UpdatedBetweenCriterion(day2, day5), 1, 1)
 	assert.NoError(t, err)
 	require.NotNil(t, pgnr4)
 

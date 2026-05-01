@@ -7,6 +7,7 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/bucket"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/iterz"
+	"github.com/mxbossard/utilz/timez"
 	"github.com/mxbossard/utilz/ztring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,7 +59,7 @@ func TestStore_Save(t *testing.T) {
 	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
 
-	err = b.UpdateText(expectedTxt)
+	err = b.SetText(expectedTxt)
 	assert.NoError(t, err)
 
 	err = s.Save(b)
@@ -89,7 +90,7 @@ func TestStore_Get(t *testing.T) {
 
 	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
-	err = b.UpdateText(expectedTxt)
+	err = b.SetText(expectedTxt)
 	assert.NoError(t, err)
 
 	// Get after Save
@@ -137,7 +138,7 @@ func TestStore_Commit(t *testing.T) {
 
 	b := s.NewBucket(expectedName, expectedLabels)
 	assert.NotNil(t, b)
-	err = b.UpdateText(expectedTxt)
+	err = b.SetText(expectedTxt)
 	assert.NoError(t, err)
 
 	// Get after Save
@@ -203,49 +204,70 @@ func TestStore_Filter(t *testing.T) {
 	expectedNameE := "bE"
 	expectedTxtE1 := ztring.LoremIpsumWords(25)
 
+	t0 := timez.ParseYyyyMmDd("2026-04-30")
+
 	// bA
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
 	bA := s1.NewBucket(expectedNameA, expectedLabels)
 	assert.NotNil(t, bA)
-	err = bA.UpdateText(expectedTxtA1)
+	err = bA.SetText(expectedTxtA1)
 	assert.NoError(t, err)
-	err = s1.Save(bA)
+	err = s1.Save(bA, t1)
 	assert.NoError(t, err)
 
 	// bB (commited)
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
 	bB := s1.NewBucket(expectedNameB, expectedLabels)
 	assert.NotNil(t, bB)
-	err = bB.UpdateText(expectedTxtB1)
+	err = bB.SetText(expectedTxtB1)
 	assert.NoError(t, err)
-	err = s1.Save(bB)
+	err = s1.Save(bB, t2)
 	assert.NoError(t, err)
 	err = s1.Commit(bB, false)
 	assert.NoError(t, err)
+	// Update bB
+	err = bB.SetText(expectedTxtB1 + "updated")
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2)
+	assert.NoError(t, err)
 
 	// bC
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
 	bC := s1.NewBucket(expectedNameC, expectedLabels)
 	assert.NotNil(t, bC)
-	err = bC.UpdateText(expectedTxtC1)
+	err = bC.SetText(expectedTxtC1)
 	assert.NoError(t, err)
-	err = s1.Save(bC)
+	err = s1.Save(bC, t3)
+	assert.NoError(t, err)
+	// Update bC
+	err = bC.SetText(expectedTxtC1 + "updated")
+	assert.NoError(t, err)
+	err = s1.Save(bC, t3)
 	assert.NoError(t, err)
 
 	// bD (commited)
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
 	bD := s1.NewBucket(expectedNameD, expectedLabels)
 	assert.NotNil(t, bD)
-	err = bD.UpdateText(expectedTxtD1)
+	err = bD.SetText(expectedTxtD1)
 	assert.NoError(t, err)
-	err = s1.Save(bD)
+	err = s1.Save(bD, t4)
 	assert.NoError(t, err)
 	err = s1.Commit(bD, false)
 	assert.NoError(t, err)
 
 	// bE
+	t5 := timez.ParseYyyyMmDd("2026-05-05")
 	bE := s1.NewBucket(expectedNameE, expectedLabels)
 	assert.NotNil(t, bE)
-	err = bE.UpdateText(expectedTxtE1)
+	err = bE.SetText(expectedTxtE1)
 	assert.NoError(t, err)
-	err = s1.Save(bE)
+	err = s1.Save(bE, t5)
 	assert.NoError(t, err)
+
+	tEnd := timez.ParseYyyyMmDd("2026-05-31")
+	_ = t0
+	_ = tEnd
 
 	// Use a second service with different ephemeral dir
 	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir, "device", "salt")
@@ -312,30 +334,51 @@ func TestStore_Filter(t *testing.T) {
 	require.Nil(t, bE2)
 
 	// Check Filtering
-	paginerA1, err := s1.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
+
+	// BktA created between t0 & t2
+	paginerA1, err := s1.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(t0, t2), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerA1)
 	entriesA1 := iterz.Flatten(paginerA1.All())
 	require.Len(t, entriesA1, 1)
 	assert.Equal(t, expectedNameA, entriesA1[0].Val().Header.Name)
 
-	paginerA2, err := s2.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
+	// No bucket created between t0 & t1 (limits excluded)
+	paginerA2, err := s2.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(t0, t1), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerA1)
 	entriesA2 := iterz.Flatten(paginerA2.All())
 	require.Len(t, entriesA2, 0)
 
-	paginerB1, err := s1.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
+	// BktC created between t2 & t4 (updated)
+	paginerC1, err := s1.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(t2, t4), 1, 0)
+	assert.NoError(t, err)
+	require.NotNil(t, paginerC1)
+	entriesC1 := iterz.Flatten(paginerC1.All())
+	require.Len(t, entriesC1, 1)
+	assert.Equal(t, expectedNameC, entriesC1[0].Val().Header.Name)
+
+	// BktB created between t1 & t3 (commited then updated)
+	paginerB1, err := s1.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(t1, t3), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerB1)
 	entriesB1 := iterz.Flatten(paginerB1.All())
 	require.Len(t, entriesB1, 1)
 	assert.Equal(t, expectedNameB, entriesB1[0].Val().Header.Name)
 
-	paginerB2, err := s2.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(*bB1.Header.Created, *bC1.Header.Created), 1, 0)
+	// Refilter to check consistency
+	paginerB2, err := s2.Filter(bucket.OlderFirst, bucket.CreatedBetweenCriterion(t1, t3), 1, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, paginerB2)
 	entriesB2 := iterz.Flatten(paginerB2.All())
 	require.Len(t, entriesB2, 1)
 	assert.Equal(t, expectedNameB, entriesB2[0].Val().Header.Name)
+
+	// Search for updates: only one
+	paginerC2, err := s2.Filter(bucket.OlderFirst, bucket.UpdatedBetweenCriterion(t0, tEnd), 1, 0)
+	assert.NoError(t, err)
+	require.NotNil(t, paginerC2)
+	entriesC2 := iterz.Flatten(paginerC2.All())
+	require.Len(t, entriesC2, 1)
+	assert.Equal(t, expectedNameB, entriesC2[0].Val().Header.Name)
 }

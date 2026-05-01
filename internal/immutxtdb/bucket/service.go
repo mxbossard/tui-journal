@@ -67,7 +67,8 @@ type Service interface {
 	// Get a slice of Buckets
 	// FIXME: filter on which terms ? CANNOT reuse idx filters and use it on all bucket indexes.
 	Filter(o Sort, f Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error)
-	// Save a Bucket
+	// Save a Bucket in supplied partition.
+	// If a time is supplied will use it for creation or update time.
 	Save(b *Bucket, partition string, t ...time.Time) error
 	// Export all layers of a bucket
 	Export(uid BucketUid, headerHist, dataHist, squash bool) (*BucketExport, error)
@@ -112,7 +113,7 @@ func (s *bucketService) new(name string, labels Labels) *Bucket {
 
 func (s *bucketService) NewText(name string, labels Labels, text string) (*Bucket, error) {
 	b := s.New(name, labels)
-	err := b.UpdateText(text)
+	err := b.SetText(text)
 	return b, err
 }
 
@@ -176,6 +177,7 @@ func (s *bucketService) addLayer(partition string, state idx.State, uid BucketUi
 	return brEntry, nil
 }
 
+// Create a bucket in supplied partition at suplied time
 func (s *bucketService) create(b *Bucket, partition string, t time.Time) error {
 	b.Header.Created = &t
 	// if b.Header.Created == nil {
@@ -243,6 +245,7 @@ func (s *bucketService) create(b *Bucket, partition string, t time.Time) error {
 	return nil
 }
 
+// Update a bucket in supplied partition at suplied time
 func (s *bucketService) update(b *Bucket, partition string, t time.Time) error {
 	// now := time.Now()
 

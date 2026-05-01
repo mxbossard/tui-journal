@@ -133,6 +133,10 @@ func newNamedBucket(s Service, uid BucketUid, name string) *Bucket {
 	return b
 }
 
+func (b *Bucket) String() string {
+	return fmt.Sprintf("Bucket[%s,#%v]", b.Header.Name, b.Header.Uid)
+}
+
 func (b *Bucket) LayerIt(version Version) (iter.Seq2[error, *Layer], error) {
 	return b.service.buildLayerIt(b, version)
 }
@@ -155,7 +159,7 @@ func (b *Bucket) ProjectText(version Version) (txt string, err error) {
 	return projectText(b, version)
 }
 
-func (b *Bucket) Update(data []byte) (int, error) {
+func (b *Bucket) SetBytes(data []byte) (int, error) {
 	if b.Header.Mode == TextMode {
 		return -1, fmt.Errorf("use UpdateText for text mode bucket")
 	}
@@ -170,7 +174,7 @@ func (b *Bucket) Update(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (b *Bucket) UpdateText(text string) error {
+func (b *Bucket) SetText(text string) error {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 	if b.Header.Mode != 0 && b.Header.Mode != TextMode {

@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/bucket"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
@@ -49,10 +50,10 @@ func (s TwoPhasesStore) NewBucket(name string, labels bucket.Labels) *bucket.Buc
 	return b
 }
 
-// Save in ephemeral store
-func (s TwoPhasesStore) Save(b *bucket.Bucket) error {
+// Save in ephemeral store at supplied time
+func (s TwoPhasesStore) Save(b *bucket.Bucket, t ...time.Time) error {
 	partition := fmt.Sprintf("%x", b.Header.Uid)
-	err := s.ephemeral.Save(b, partition)
+	err := s.ephemeral.Save(b, partition, t...)
 	return err
 }
 
