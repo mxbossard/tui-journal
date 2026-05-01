@@ -13,7 +13,6 @@ import (
 // 1 ephemeral store
 // 1 rested store
 // Commit() to promote ephemeral storage into rested storage
-
 type TwoPhasesStore struct {
 	ephemeral bucket.Service
 	rested    bucket.Service
@@ -50,9 +49,31 @@ func (s TwoPhasesStore) NewBucket(name string, labels bucket.Labels) *bucket.Buc
 	return b
 }
 
+func ephemeralBucketPartition(b *bucket.Bucket) string {
+	return fmt.Sprintf("%x", b.Header.Uid)
+}
+
 // Save in ephemeral store at supplied time
 func (s TwoPhasesStore) Save(b *bucket.Bucket, t ...time.Time) error {
-	partition := fmt.Sprintf("%x", b.Header.Uid)
+	partition := ephemeralBucketPartition(b)
+	if b.Metadata != nil && b.Metadata.Version > 0 {
+		// For bucket save with version greater than 0
+		_, err := s.ephemeral.Get(b.Header.Uid)
+		if err == bucket.ErrNotExist {
+			// If bucket not in ephemeral service, need to import if back from rested service.
+			export, err := s.rested.Export(b.Header.Uid, false, false, false)
+			if err != nil {
+				return err
+			}
+			err = s.ephemeral.Import(export, partition)
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+	}
+
 	err := s.ephemeral.Save(b, partition, t...)
 	return err
 }
@@ -84,13 +105,20 @@ func (s TwoPhasesStore) Commit(b *bucket.Bucket, squash bool) error {
 	// Idea 2: Use idx.Hide considering all ephemeral hidden entries not existing. Drawbacks: how to clean ephemeral store ?
 	// Idea 3: Use a bucket.Service not based on blocs files but on rewritable files ?
 
-	// Do we want to erase Bucket from ephemeral store => yes we delete the bucket dedicated partition.
-
+	// 1- Import ephemeral bucket in rested service
 	export, err := s.ephemeral.Export(b.Header.Uid, false, false, squash)
 	if err != nil {
 		return err
 	}
 	err = s.rested.Import(export, s.writePartition)
+	if err != nil {
+		return err
+	}
+
+	// 2- After ephemeral import => erase ephemeral partition
+	partition := ephemeralBucketPartition(b)
+	s.ephemeral.ErasePartition(partition)
+
 	return err
 }
 
@@ -138,6 +166,19 @@ func (s TwoPhasesStore) Filter(sort bucket.Sort, c bucket.Criteria, pageSize, pr
 		return nil, err
 	}
 
-	// TODO: need to apply a distinct filter to not list same bucket from ephemeral & stored.
-	return idx.CatPaginers(idx.EntryTimeCompare[bucket.BucketUid, *bucket.Bucket](idx.TopToBottom), pageSize, preloadPageCount, pe, pr), nil
+	concat := idx.CatPaginers(idx.EntryTimeCompare[bucket.BucketUid, *bucket.Bucket](idx.TopToBottom), pageSize, preloadPageCount, pe, pr)
+	distinct := idx.DistinctPaginer(func(entries ...idx.Entry[bucket.BucketUid, *bucket.Bucket]) idx.Entry[bucket.BucketUid, *bucket.Bucket] {
+		// keep bucket with higher version
+		var maxVersion bucket.Version
+		var selected idx.Entry[bucket.BucketUid, *bucket.Bucket]
+		for _, e := range entries {
+			if e.Val().Metadata.Version > maxVersion {
+				selected = e
+				maxVersion = e.Val().Metadata.Version
+			}
+		}
+		return selected
+	}, concat)
+
+	return distinct, nil
 }

@@ -11,34 +11,37 @@
 - [x] Keep state of last version loaded in case of successive loading ?
 - [x] Add Bucket Service Export / Import (without squashing for now)
 - [x] Add idx KeyFiltering the right way (working with GlidingHasher or not, with key or bytesKey)
+- [x] Idx Concatenation
+- [x] Implement RotatingHash, who's responsability ?
+- [x] Validate idx errChan usage
+- [x] Implem idx Filter methods
+- [x] A first text diff/layering impl (use a version / impl qualifier ?)
 - [x] Bucket Criteria & Sorting => Fix Bucket service filtering (cannot use same filtering than idx) 
       - Need smarter filtering : (if one layer is found all the bucket must be loaded) 
       - On which terms filter ? times (creation, update), bucket states, bucket names ?, bucket uids ?
       - Ordering on time : YoungerFirst / OlderFirst
 - [_] Implem Two Phases store first version
       - [x] Supply time optionnaly to Save a bucket
-      - [_] Test Commit()
+      - [x] Does Updated criteria should match created but not updated buckets ? => NO
+      - [x] Manage Commited buckets + Update Merge
+            - A commited bucket was imported into rested service and ephemeral parts were deleted.
+            - Updating a commited bucket need an import back from rested into ephemeral service if it does not exists yet.
       - [_] Test Names()
-      - [_] Manage Commited buckets + Update Merge
+      - [_] Test Bucket Commit Then Get Then Update then Get
 
 - [_] For now use a Symbolic Zip & Encrypt methode: "Zip[<DATA>] ; Encrypt[<DATA>] for test purpose.
 - [_] Add Store / Service Snapshot() HOW ?
-- [x] Idx Concatenation
 - [_] Add idx export / import unittests (especially with hashed keys)
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
-- [x] Implement RotatingHash, who's responsability ?
-- [x] Validate idx errChan usage
-- [x] Implem idx Filter methods
-- [x] A first text diff/layering impl (use a version / impl qualifier ?)
 - [_] Manage preloading of idx files ?
 - [_] Do we need to optimize "file reading stop" at snapshot layer ? Could provide a func to decide "preloading stop".
 - [_] Encryption of BlocsFiles impl
 - [_] Randomly generated SecretKey ciphered with user passphrase
-- [_] Bucket squashing
-- [_] Bucket hiding : like a delete but data are kept
-- [_] Bucket "history" : show a history of the bucket
+- [_] Bucket / Store squashing
 - [_] Idx Entry Hiding
+- [_] Bucket / Store hiding : like a delete but data are kept
+- [_] Bucket / Store "history" : show a history of the bucket
 - [_] Improve time filtering with more precise filtering ? Where do this filtering ? Bucket service level ? Store level ?
 
 

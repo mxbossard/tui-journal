@@ -276,3 +276,32 @@ func FilterPaginer[K comparable, V any](filter func(e Entry[K, V]) bool, p Pagin
 	})
 	return paginer
 }
+
+// Naive implem: need to load all entries to be able to perform the distinct
+func DistinctPaginer[K comparable, V any](distinct func(entries ...Entry[K, V]) Entry[K, V], p Paginer[K, V]) Paginer[K, V] {
+	byKeyMap := make(map[K][]Entry[K, V])
+	for e := range p.All() {
+		if vals, ok := byKeyMap[e.Key()]; ok {
+			vals = append(vals, e)
+		} else {
+			byKeyMap[e.Key()] = []Entry[K, V]{e}
+		}
+	}
+
+	keyMap := make(map[K]bool)
+	paginer := NewPaginer(p.PageSize(), p.PreloadedPageCount(), func(push func(e Entry[K, V]) bool) {
+		// Keep ordering
+		for e := range p.All() {
+			if _, ok := keyMap[e.Key()]; !ok {
+				// key not selected yet
+				vals := byKeyMap[e.Key()]
+				selected := distinct(vals...)
+				if !push(selected) {
+					return
+				}
+				keyMap[e.Key()] = true
+			}
+		}
+	})
+	return paginer
+}

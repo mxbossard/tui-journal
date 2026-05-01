@@ -51,7 +51,7 @@ func (e BasicEntry[K, V]) String() string {
 	if e.key != nil {
 		key = *e.key
 	}
-	return fmt.Sprintf("Entry(#%d)[%v, %s]", e.seq, key, e.val)
+	return fmt.Sprintf("Entry(#%d)[%v, %v]", e.seq, key, *e.val)
 }
 
 func (e BasicEntry[K, V]) Key() K {

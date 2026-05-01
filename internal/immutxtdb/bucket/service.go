@@ -74,6 +74,8 @@ type Service interface {
 	Export(uid BucketUid, headerHist, dataHist, squash bool) (*BucketExport, error)
 	// Import an Exported Bucket in the service
 	Import(export *BucketExport, partition string) error
+	// Erase a partition of the index
+	ErasePartition(partition string) error
 
 	buildLayerIt(b *Bucket, v Version) (iter.Seq2[error, *Layer], error)
 }
@@ -682,6 +684,26 @@ func (s *bucketService) Names() (map[string]BucketUid, error) {
 	return lastUidByNameMap, nil
 }
 
+func (s *bucketService) ErasePartition(partition string) error {
+	bucketNameIdxDir, headerRefIdxDir, bucketRefIdxDir, err := forgeIndexesDir(s.dir, partition)
+	if err != nil {
+		return err
+	}
+	err = os.RemoveAll(bucketNameIdxDir)
+	if err != nil {
+		return err
+	}
+	err = os.RemoveAll(headerRefIdxDir)
+	if err != nil {
+		return err
+	}
+	err = os.RemoveAll(bucketRefIdxDir)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[error, *Layer], error) {
 	existingParts, err := scanServicePartitions(s.dir)
 	if err != nil {
@@ -915,6 +937,7 @@ func generateRandUid() BucketUid {
 	return BucketUid(randBytes)
 }
 
+// return bucketNameIdxDir, headerRefIdxDir, bucketRefIdxDir
 func forgeIndexesDir(dir, partition string) (string, string, string, error) {
 	bucketNameIdxDir := filepath.Join(dir, bucketIdxDir, partition, "bucketNameIdx")
 	headerRefIdxDir := filepath.Join(dir, bucketIdxDir, partition, "headerRefIdx")
