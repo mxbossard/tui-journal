@@ -26,9 +26,9 @@
       - [x] Manage Commited buckets + Update Merge
             - A commited bucket was imported into rested service and ephemeral parts were deleted.
             - Updating a commited bucket need an import back from rested into ephemeral service if it does not exists yet.
-      - [_] Test Names()
-      - [_] Test Bucket Commit Then Get Then Update then Get
-
+      - [x] Test Names()
+      - [x] Test Bucket Commit Then Get Then Update then Get 
+      - [_] Test Commit Get Update on different partitions (with conflicts)
 - [_] For now use a Symbolic Zip & Encrypt methode: "Zip[<DATA>] ; Encrypt[<DATA>] for test purpose.
 - [_] Add Store / Service Snapshot() HOW ?
 - [_] Add idx export / import unittests (especially with hashed keys)

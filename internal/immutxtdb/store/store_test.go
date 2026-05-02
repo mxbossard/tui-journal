@@ -66,13 +66,6 @@ func TestStore_Save(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestStore_Names(t *testing.T) {
-	// Save some buckets
-	// Commit some buckets
-	// Check names
-	//TODO
-}
-
 func TestStore_Get(t *testing.T) {
 	tmpEDir := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpEDir)
@@ -658,4 +651,323 @@ func TestStore_Filter_Commited_Updated(t *testing.T) {
 	require.NotNil(t, paginerE2)
 	entriesE2 := iterz.Flatten(paginerE2.All())
 	assert.Len(t, entriesE2, 2)
+}
+
+func TestStore_Names(t *testing.T) {
+	// Save some buckets
+	// Commit some buckets
+	// Check names
+
+	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir1)
+	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir2)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
+
+	// Use a first service
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir, "device", "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s1)
+
+	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedNameA := "bA"
+	expectedTxtA1 := ztring.LoremIpsumWords(2)
+	expectedNameB := "bB"
+	expectedTxtB1 := ztring.LoremIpsumWords(4)
+	expectedNameC := "bC"
+	expectedTxtC1 := ztring.LoremIpsumWords(6)
+	expectedNameD := "bD"
+	expectedTxtD1 := ztring.LoremIpsumWords(8)
+	expectedNameE := "bE"
+	expectedTxtE1 := ztring.LoremIpsumWords(10)
+
+	t0 := timez.ParseYyyyMmDd("2026-04-30")
+
+	// bA
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
+	bA := s1.NewBucket(expectedNameA, expectedLabels)
+	assert.NotNil(t, bA)
+	err = bA.SetText(expectedTxtA1)
+	assert.NoError(t, err)
+	err = s1.Save(bA, t1)
+	assert.NoError(t, err)
+
+	// bB (commited)
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
+	bB := s1.NewBucket(expectedNameB, expectedLabels)
+	assert.NotNil(t, bB)
+	err = bB.SetText(expectedTxtB1)
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2)
+	assert.NoError(t, err)
+	err = s1.Commit(bB, false)
+	assert.NoError(t, err)
+	// Update bB AFTER Commit
+	err = bB.SetText(expectedTxtB1 + "updated")
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2)
+	assert.NoError(t, err)
+
+	// bC
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
+	bC := s1.NewBucket(expectedNameC, expectedLabels)
+	assert.NotNil(t, bC)
+	err = bC.SetText(expectedTxtC1)
+	assert.NoError(t, err)
+	err = s1.Save(bC, t3)
+	assert.NoError(t, err)
+
+	// bD (commited)
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
+	bD := s1.NewBucket(expectedNameD, expectedLabels)
+	assert.NotNil(t, bD)
+	err = bD.SetText(expectedTxtD1)
+	assert.NoError(t, err)
+	err = s1.Save(bD, t4)
+	assert.NoError(t, err)
+	// Update bD BEFORE Commit
+	err = bD.SetText(expectedTxtD1 + "updated")
+	assert.NoError(t, err)
+	err = s1.Save(bD, t4)
+	assert.NoError(t, err)
+	err = s1.Commit(bD, false)
+	assert.NoError(t, err)
+
+	// Update bC
+	err = bC.SetText(expectedTxtC1 + "updated")
+	assert.NoError(t, err)
+	err = s1.Save(bC, t4)
+	assert.NoError(t, err)
+
+	// bE
+	t5 := timez.ParseYyyyMmDd("2026-05-05")
+	bE := s1.NewBucket(expectedNameE, expectedLabels)
+	assert.NotNil(t, bE)
+	err = bE.SetText(expectedTxtE1)
+	assert.NoError(t, err)
+	err = s1.Save(bE, t5)
+	assert.NoError(t, err)
+
+	tEnd := timez.ParseYyyyMmDd("2026-05-31")
+	_ = t0
+	_ = tEnd
+
+	names1, err := s1.Names()
+	assert.NoError(t, err)
+	assert.Len(t, names1, 5)
+	assert.Contains(t, names1, expectedNameA)
+	assert.Contains(t, names1, expectedNameB)
+	assert.Contains(t, names1, expectedNameC)
+	assert.Contains(t, names1, expectedNameD)
+	assert.Contains(t, names1, expectedNameE)
+
+	// Use a second service with different ephemeral dir
+	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir, "device", "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s2)
+
+	names2, err := s1.Names()
+	assert.NoError(t, err)
+	assert.Len(t, names2, 5)
+	assert.Contains(t, names2, expectedNameA)
+	assert.Contains(t, names2, expectedNameB)
+	assert.Contains(t, names2, expectedNameC)
+	assert.Contains(t, names2, expectedNameD)
+	assert.Contains(t, names2, expectedNameE)
+
+}
+
+func TestStore_Commit_Get_Update_Get(t *testing.T) {
+	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir1)
+	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir2)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
+
+	// Use a first service
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir, "device", "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s1)
+
+	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedNameA := "bA"
+	expectedTxtA1 := ztring.LoremIpsumWords(2)
+	expectedNameB := "bB"
+	expectedTxtB1 := ztring.LoremIpsumWords(4)
+
+	// bA
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
+	bA := s1.NewBucket(expectedNameA, expectedLabels)
+	assert.NotNil(t, bA)
+	err = bA.SetText(expectedTxtA1)
+	assert.NoError(t, err)
+	err = s1.Save(bA, t1)
+	assert.NoError(t, err)
+
+	// Save and Commit bB
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
+	bB := s1.NewBucket(expectedNameB, expectedLabels)
+	assert.NotNil(t, bB)
+	err = bB.SetText(expectedTxtB1)
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2)
+	assert.NoError(t, err)
+	err = s1.Commit(bB, false)
+	assert.NoError(t, err)
+
+	// Update bB AFTER Commit
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
+	err = bB.SetText(expectedTxtB1 + "update1")
+	assert.NoError(t, err)
+	err = s1.Save(bB, t3)
+	assert.NoError(t, err)
+	err = s1.Commit(bB, false)
+	assert.NoError(t, err)
+
+	// Get bB from s1
+	bB1, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err := bB1.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+
+	// Update & Commit bB from s1
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
+	err = bB1.SetText(expectedTxtB1 + "update2")
+	assert.NoError(t, err)
+	err = s1.Save(bB1, t4)
+	assert.NoError(t, err)
+	err = s1.Commit(bB1, false)
+	assert.NoError(t, err)
+
+	// Use a second service with different ephemeral dir
+	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir, "device", "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s2)
+
+	// Get bB from s2
+	bB2, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+
+	// Update & Commit bB from s2
+	t5 := timez.ParseYyyyMmDd("2026-05-05")
+	err = bB2.SetText(expectedTxtB1 + "update3")
+	assert.NoError(t, err)
+	err = s2.Save(bB2, t5)
+	assert.NoError(t, err)
+	err = s2.Commit(bB2, false)
+	assert.NoError(t, err)
+
+	// Get bB from s1
+	bB1bis, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB1bis.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update3", txt)
+}
+
+func TestStore_Commit_Conflict(t *testing.T) {
+	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir1)
+	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir2)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
+
+	// Use a first service
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir, "device", "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s1)
+
+	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedNameA := "bA"
+	expectedTxtA1 := ztring.LoremIpsumWords(2)
+	expectedNameB := "bB"
+	expectedTxtB1 := ztring.LoremIpsumWords(4)
+
+	// bA
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
+	bA := s1.NewBucket(expectedNameA, expectedLabels)
+	assert.NotNil(t, bA)
+	err = bA.SetText(expectedTxtA1)
+	assert.NoError(t, err)
+	err = s1.Save(bA, t1)
+	assert.NoError(t, err)
+
+	// Save and Commit bB
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
+	bB := s1.NewBucket(expectedNameB, expectedLabels)
+	assert.NotNil(t, bB)
+	err = bB.SetText(expectedTxtB1)
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2)
+	assert.NoError(t, err)
+	err = s1.Commit(bB, false)
+	assert.NoError(t, err)
+
+	// Get bB from s1
+	bB1, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err := bB1.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Update bB from s1
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
+	err = bB1.SetText(expectedTxtB1 + "update1")
+	assert.NoError(t, err)
+	err = s1.Save(bB1, t3)
+	assert.NoError(t, err)
+
+	// Use a second service with different ephemeral dir
+	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir, "device", "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s2)
+
+	// Get bB from s2
+	bB2, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Update bB from s2
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
+	err = bB2.SetText(expectedTxtB1 + "update2")
+	assert.NoError(t, err)
+	err = s2.Save(bB2, t4)
+	assert.NoError(t, err)
+
+	// Commit bB1 in s1
+	err = s1.Commit(bB1, false)
+	assert.NoError(t, err)
+
+	// Commit bB2 in s2
+	err = s2.Commit(bB2, false)
+	assert.NoError(t, err)
+
+	// Get bB from s1
+	bB1bis, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB1bis.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+	txt, err = bB1bis.ProjectText(bucket.LatestVersion - 1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+
+	// Get bB from s2
+	bB2bis, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2bis.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+	txt, err = bB2bis.ProjectText(bucket.LatestVersion - 1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
 }
