@@ -1064,3 +1064,125 @@ func TestBucketService_FilterMultipart(t *testing.T) {
 	}
 	assert.Equal(t, 3, k)
 }
+
+func TestBucketService_EditMultiParts_Conflict(t *testing.T) {
+	tmpDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpDir)
+
+	expectedPartition1 := "device1"
+	expectedPartition2 := "device2"
+	expectedSalt := "salt"
+	expectedName := "foo"
+	expectedMsg1 := ztring.LoremIpsumWords(10)
+	expectedMsg1a := ztring.LoremIpsumWords(12)
+	expectedMsg1b := ztring.LoremIpsumWords(14)
+	expectedLabels := Labels{
+		"foo": "pif",
+		"bar": "paf",
+	}
+
+	svc, err := NewBucketService(tmpDir, expectedSalt)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+
+	bkt1 := svc.New(expectedName, expectedLabels)
+	assert.NotNil(t, bkt1)
+
+	assert.Nil(t, bkt1.Metadata)
+
+	// First Save expectedMsg1 in bkt1
+	err = bkt1.SetText(expectedMsg1)
+	assert.NoError(t, err)
+	assert.Nil(t, bkt1.Metadata)
+	err = svc.Save(bkt1, expectedPartition1)
+	assert.NoError(t, err)
+
+	// Retrieve Bkt1 2 times and perform two concurrent saves
+	bkt1a, err := svc.Get(bkt1.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bkt1a)
+	txt, err := bkt1a.ProjectText(LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg1, txt)
+
+	bkt1b, err := svc.Get(bkt1.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bkt1b)
+	txt, err = bkt1b.ProjectText(LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg1, txt)
+
+	err = bkt1a.SetText(expectedMsg1a)
+	assert.NoError(t, err)
+	// Check layer count
+	itA, err := bkt1a.LayerIt()
+	assert.NoError(t, err)
+	errs, layersA := iterz.Flatten2(itA)
+	assert.Equal(t, []error{nil}, errs)
+	assert.Len(t, layersA, 1)
+
+	err = bkt1b.SetText(expectedMsg1b)
+	assert.NoError(t, err)
+	// Check layer count
+	itB, err := bkt1b.LayerIt()
+	assert.NoError(t, err)
+	errs, layersB := iterz.Flatten2(itB)
+	assert.Equal(t, []error{nil}, errs)
+	assert.Len(t, layersB, 1)
+
+	// Save bkt 1b
+	err = svc.Save(bkt1b, expectedPartition2)
+	assert.NoError(t, err)
+	// Check layer count (a second layer should be added)
+	itB, err = bkt1b.LayerIt()
+	assert.NoError(t, err)
+	errs, layersB = iterz.Flatten2(itB)
+	assert.Equal(t, []error{nil, nil}, errs)
+	assert.Len(t, layersB, 2)
+	// check layer versions
+	require.True(t, len(layersB) >= 2)
+	assert.Equal(t, Version(1), layersB[0].Metadata.Version)
+	assert.Equal(t, Version(2), layersB[1].Metadata.Version)
+
+	// Save bkt 1a
+	err = svc.Save(bkt1a, expectedPartition1)
+	assert.NoError(t, err)
+	// Check layer count (a third layer should be added)
+	itA, err = bkt1a.LayerIt()
+	assert.NoError(t, err)
+	errs, layersA = iterz.Flatten2(itA)
+	assert.Equal(t, []error{nil, nil, nil}, errs)
+	assert.Len(t, layersA, 3)
+	// check layer versions
+	require.True(t, len(layersA) >= 3)
+	assert.Equal(t, Version(1), layersA[0].Metadata.Version)
+	assert.Equal(t, Version(2), layersA[1].Metadata.Version)
+	assert.Equal(t, Version(2), layersA[2].Metadata.Version)
+
+	// Get the bucket with conflicting saves
+	bkt1c, err := svc.Get(bkt1.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bkt1c)
+	// Check layer count
+	itC, err := bkt1c.LayerIt()
+	assert.NoError(t, err)
+	errs, layersC := iterz.Flatten2(itC)
+	assert.Equal(t, []error{nil, nil, nil}, errs)
+	assert.Len(t, layersC, 3)
+	// check layer versions
+	require.True(t, len(layersC) >= 3)
+	assert.Equal(t, Version(1), layersC[0].Metadata.Version)
+	assert.Equal(t, Version(2), layersC[1].Metadata.Version)
+	assert.Equal(t, Version(2), layersC[2].Metadata.Version)
+
+	// Last version must conflict txt should be at previous version
+	txt, err = bkt1c.ProjectText(LatestVersion)
+	assert.Error(t, err)
+	assert.Equal(t, ErrVersionConflict, err)
+	assert.Equal(t, expectedMsg1, txt)
+
+	// Check text of not conflicting version
+	txt, err = bkt1c.ProjectText(-1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg1, txt)
+}

@@ -760,9 +760,14 @@ func (s *bucketService) buildLayerIt(b *Bucket, version Version) (iter.Seq2[erro
 
 	if version == LatestVersion {
 		version = b.maxLoadedVersion
+	} else if version < 0 {
+		version += b.maxLoadedVersion
 	}
 
-	if version > b.maxLoadedVersion {
+	if version <= 0 {
+		// Asked for a version which do not exists.
+		return nil, ErrNotExist
+	} else if version > b.maxLoadedVersion {
 		// Asked for a version which do not exists.
 		return nil, ErrNotExist
 	}

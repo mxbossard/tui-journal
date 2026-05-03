@@ -1,13 +1,16 @@
 package bucket
 
 import (
+	"errors"
 	"fmt"
 	"iter"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
+	"github.com/mxbossard/utilz/collectionz"
 	"github.com/mxbossard/utilz/filez"
 )
 
@@ -23,9 +26,10 @@ const (
 )
 
 var (
-	dummyState     = idx.BuildStringState(BucketNameIdxStateSize, "dummy")
-	RootLayerState = idx.BuildState(RootLayerFlag)
-	DiffLayerState = idx.BuildState(DiffLayerFlag)
+	dummyState         = idx.BuildStringState(BucketNameIdxStateSize, "dummy")
+	RootLayerState     = idx.BuildState(RootLayerFlag)
+	DiffLayerState     = idx.BuildState(DiffLayerFlag)
+	ErrVersionConflict = errors.New("bucket version conflict")
 )
 
 type BucketUid [16]byte
@@ -137,26 +141,34 @@ func (b *Bucket) String() string {
 	return fmt.Sprintf("Bucket[%s,#%v]", b.Header.Name, b.Header.Uid)
 }
 
-func (b *Bucket) LayerIt(version Version) (iter.Seq2[error, *Layer], error) {
+func (b *Bucket) LayerIt(versions ...Version) (iter.Seq2[error, *Layer], error) {
+	var version Version
+	if len(versions) == 0 {
+		version = LatestVersion
+	} else if len(versions) == 1 {
+		version = versions[0]
+	} else {
+		panic("must supply 0 ore 1 version not more")
+	}
 	return b.service.buildLayerIt(b, version)
 }
 
-func (b *Bucket) ProjectBinary(version Version) (data []byte, err error) {
+func (b *Bucket) ProjectBinary(versions ...Version) (data []byte, err error) {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 
-	return b.projectBinary(version)
+	return b.projectBinary(versions...)
 }
 
-func (b *Bucket) projectBinary(version Version) (data []byte, err error) {
+func (b *Bucket) projectBinary(versions ...Version) (data []byte, err error) {
 	panic("not implemented yet")
 }
 
-func (b *Bucket) ProjectText(version Version) (txt string, err error) {
+func (b *Bucket) ProjectText(versions ...Version) (txt string, err error) {
 	b.Mutex.Lock()
 	defer b.Mutex.Unlock()
 
-	return projectText(b, version)
+	return projectText(b, versions...)
 }
 
 func (b *Bucket) SetBytes(data []byte) (int, error) {
@@ -194,34 +206,54 @@ func (b *Bucket) Labels(labels Labels) error {
 	panic("not implemented yet")
 }
 
-func projectText(b *Bucket, version Version) (string, error) {
+func projectText(b *Bucket, version ...Version) (string, error) {
 	txt := ""
-	k := 1
-	layerIt, err := b.LayerIt(version)
+	layerIt, err := b.LayerIt(version...)
 	if err != nil {
 		return "", err
 	}
+
+	// Collect all patchesMap
+	patchesMap := make(map[int][]string)
+	k := 1
 	for err, l := range layerIt {
+		// fmt.Printf("projecting text layer #%d v%d\n", k, l.Metadata.Version)
 		if err != nil {
 			return "", fmt.Errorf("error iterating layer #%d: %w", k, err)
 		}
-		// First layer is root layer ?
-		// TODO: is layer a root layer ?
 		data, err := zip.UnzipString(l.Content)
 		if err != nil {
 			return "", fmt.Errorf("error decompressing layer #%d v%d: %w", k, l.Metadata.Version, err)
 		}
 		if idx.MatchFlag(l.State[0], RootLayerFlag) {
+			// fmt.Printf("found root layer #%d v%d\n", k, l.Metadata.Version)
 			txt = data
 		} else if idx.MatchFlag(l.State[0], DiffLayerFlag) {
-			txt, err = PatchText(txt, data)
-			if err != nil {
-				return "", fmt.Errorf("error patching layer #%d v%d: %w", k, l.Metadata.Version, err)
-			}
+			// fmt.Printf("found diff layer #%d v%d\n", k, l.Metadata.Version)
+			// Checking layer versions
+			patchesMap[int(l.Metadata.Version)] = append(patchesMap[int(l.Metadata.Version)], data)
 		} else {
 			panic("state not supported yet")
 		}
 		k++
+	}
+
+	// Apply all patches
+	versions := collectionz.Keys(patchesMap)
+	// fmt.Printf("patchesMap: %v\n", patchesMap)
+	sort.Ints(versions)
+	// fmt.Printf("all patch versions: %v\n", versions)
+	for _, v := range versions {
+		patches := patchesMap[v]
+		// fmt.Printf("layer v%d patches: %v\n", v, patches)
+		if len(patches) > 1 {
+			// 2 layers with same version => Confilct problem
+			return txt, ErrVersionConflict
+		}
+		txt, err = PatchText(txt, patches[0])
+		if err != nil {
+			return "", fmt.Errorf("error patching layer #%d v%d: %w", k, v, err)
+		}
 	}
 	return txt, nil
 }

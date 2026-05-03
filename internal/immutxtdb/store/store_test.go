@@ -871,7 +871,14 @@ func TestStore_Commit_Get_Update_Get(t *testing.T) {
 	assert.Equal(t, expectedTxtB1+"update3", txt)
 }
 
-func TestStore_Commit_Conflict(t *testing.T) {
+func TestStore_Commit_Conflict_1Store(t *testing.T) {
+	// 2 Conflicting commits in same store
+	// - First save should store layer 2 in ephemeral store
+	// - Second save should store layer 3 in ephemeral store
+	// - First commit add 2 layers in rested store then clear ephemeral store
+	// - Second commit should do nothing
+	// => should not conflict, versions should be nicely ordered.
+
 	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpEDir1)
 	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
@@ -879,8 +886,10 @@ func TestStore_Commit_Conflict(t *testing.T) {
 	tmpRDir := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpRDir)
 
+	expectedPart1 := "device1"
+
 	// Use a first service
-	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir, "device", "salt")
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir, expectedPart1, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s1)
 
@@ -888,7 +897,105 @@ func TestStore_Commit_Conflict(t *testing.T) {
 	expectedNameA := "bA"
 	expectedTxtA1 := ztring.LoremIpsumWords(2)
 	expectedNameB := "bB"
-	expectedTxtB1 := ztring.LoremIpsumWords(4)
+	expectedTxtB1 := ztring.LoremIpsumWords(10)
+
+	// bA
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
+	bA := s1.NewBucket(expectedNameA, expectedLabels)
+	assert.NotNil(t, bA)
+	err = bA.SetText(expectedTxtA1)
+	assert.NoError(t, err)
+	err = s1.Save(bA, t1)
+	assert.NoError(t, err)
+
+	// Save and Commit bB
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
+	bB := s1.NewBucket(expectedNameB, expectedLabels)
+	assert.NotNil(t, bB)
+	err = bB.SetText(expectedTxtB1)
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2)
+	assert.NoError(t, err)
+	err = s1.Commit(bB, false)
+	assert.NoError(t, err)
+
+	// Get bB1 from s1
+	bB1, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err := bB1.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Update bB1 from s1
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
+	err = bB1.SetText(expectedTxtB1 + "update1")
+	assert.NoError(t, err)
+	err = s1.Save(bB1, t3) // Save bB1 in ephemeral store (add a diff layer)
+	assert.NoError(t, err)
+
+	// Get bB2 from s1
+	bB2, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+
+	// Update bB2 from s1
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
+	err = bB2.SetText(expectedTxtB1 + "update2")
+	assert.NoError(t, err)
+	err = s1.Save(bB2, t4) // Save bB2 in ephemeral store (add a diff layer)
+	assert.NoError(t, err)
+
+	// Commit bB1 in s1
+	err = s1.Commit(bB1, false)
+	assert.NoError(t, err)
+	txt, err = bB1.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+
+	// Commit bB2 in s1
+	err = s1.Commit(bB2, false)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+
+	// Get bB from s1
+	bB1bis, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB1bis.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	// assert.Equal(t, bucket.ErrVersionConflict, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+	txt, err = bB1bis.ProjectText(-1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+	txt, err = bB1bis.ProjectText(-2)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+}
+
+func TestStore_Commit_Conflict_1Part(t *testing.T) {
+	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir1)
+	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir2)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
+
+	expectedPart1 := "device1"
+
+	// Use a first service
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir, expectedPart1, "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s1)
+
+	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedNameA := "bA"
+	expectedTxtA1 := ztring.LoremIpsumWords(2)
+	expectedNameB := "bB"
+	expectedTxtB1 := ztring.LoremIpsumWords(10)
 
 	// bA
 	t1 := timez.ParseYyyyMmDd("2026-05-01")
@@ -924,8 +1031,8 @@ func TestStore_Commit_Conflict(t *testing.T) {
 	err = s1.Save(bB1, t3)
 	assert.NoError(t, err)
 
-	// Use a second service with different ephemeral dir
-	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir, "device", "salt")
+	// Use a second service with different ephemeral dir and same partition
+	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir, expectedPart1, "salt")
 	assert.NoError(t, err)
 	assert.NotNil(t, s2)
 
@@ -946,28 +1053,154 @@ func TestStore_Commit_Conflict(t *testing.T) {
 	// Commit bB1 in s1
 	err = s1.Commit(bB1, false)
 	assert.NoError(t, err)
+	txt, err = bB1.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
 
 	// Commit bB2 in s2
 	err = s2.Commit(bB2, false)
 	assert.NoError(t, err)
+	txt, err = bB2.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
 
 	// Get bB from s1
 	bB1bis, err := s1.Get(bB.Header.Uid)
 	assert.NoError(t, err)
 	txt, err = bB1bis.ProjectText(bucket.LatestVersion)
 	assert.NoError(t, err)
+	// assert.Equal(t, bucket.ErrVersionConflict, err)
 	assert.Equal(t, expectedTxtB1+"update2", txt)
-	txt, err = bB1bis.ProjectText(bucket.LatestVersion - 1)
+	txt, err = bB1bis.ProjectText(-1)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxtB1+"update1", txt)
+	txt, err = bB1bis.ProjectText(-2)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
 
 	// Get bB from s2
 	bB2bis, err := s2.Get(bB.Header.Uid)
 	assert.NoError(t, err)
 	txt, err = bB2bis.ProjectText(bucket.LatestVersion)
 	assert.NoError(t, err)
+	// assert.Equal(t, bucket.ErrVersionConflict, err)
 	assert.Equal(t, expectedTxtB1+"update2", txt)
-	txt, err = bB2bis.ProjectText(bucket.LatestVersion - 1)
+	txt, err = bB2bis.ProjectText(-1)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxtB1+"update1", txt)
+	txt, err = bB2bis.ProjectText(-2)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+}
+
+func TestStore_Commit_Conflict_2Parts(t *testing.T) {
+	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir1)
+	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir2)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
+
+	expectedPart1 := "device1"
+	expectedPart2 := "device2"
+
+	// Use a first service
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir, expectedPart1, "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s1)
+
+	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedNameA := "bA"
+	expectedTxtA1 := ztring.LoremIpsumWords(2)
+	expectedNameB := "bB"
+	expectedTxtB1 := ztring.LoremIpsumWords(10)
+
+	// bA
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
+	bA := s1.NewBucket(expectedNameA, expectedLabels)
+	assert.NotNil(t, bA)
+	err = bA.SetText(expectedTxtA1)
+	assert.NoError(t, err)
+	err = s1.Save(bA, t1)
+	assert.NoError(t, err)
+
+	// Save and Commit bB
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
+	bB := s1.NewBucket(expectedNameB, expectedLabels)
+	assert.NotNil(t, bB)
+	err = bB.SetText(expectedTxtB1)
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2)
+	assert.NoError(t, err)
+	err = s1.Commit(bB, false)
+	assert.NoError(t, err)
+
+	// Get bB from s1
+	bB1, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err := bB1.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Update bB from s1
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
+	err = bB1.SetText(expectedTxtB1 + "update1")
+	assert.NoError(t, err)
+	err = s1.Save(bB1, t3)
+	assert.NoError(t, err)
+
+	// Use a second service with different ephemeral dir and different partition
+	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir, expectedPart2, "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s2)
+
+	// Get bB from s2
+	bB2, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Update bB from s2
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
+	err = bB2.SetText(expectedTxtB1 + "update2")
+	assert.NoError(t, err)
+	err = s2.Save(bB2, t4)
+	assert.NoError(t, err)
+
+	// Commit bB1 in s1
+	err = s1.Commit(bB1, false)
+	assert.NoError(t, err)
+	txt, err = bB1.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+
+	// Commit bB2 in s2
+	err = s2.Commit(bB2, false)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+
+	// Get bB from s1
+	bB1bis, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB1bis.ProjectText(bucket.LatestVersion)
+	assert.Error(t, err)
+	assert.Equal(t, bucket.ErrVersionConflict, err)
+	assert.Equal(t, expectedTxtB1, txt)
+	txt, err = bB1bis.ProjectText(-1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Get bB from s2
+	bB2bis, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2bis.ProjectText(bucket.LatestVersion)
+	assert.Error(t, err)
+	assert.Equal(t, bucket.ErrVersionConflict, err)
+	assert.Equal(t, expectedTxtB1, txt)
+	txt, err = bB1bis.ProjectText(-1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
 }

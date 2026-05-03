@@ -20,6 +20,10 @@
       - Need smarter filtering : (if one layer is found all the bucket must be loaded) 
       - On which terms filter ? times (creation, update), bucket states, bucket names ?, bucket uids ?
       - Ordering on time : YoungerFirst / OlderFirst
+- [_] Manage Bucket.Project() conflicts
+      - [x] Use negative versions as ref from LatestVersion => v-1 = ^HEAD = LatestVersion - 1
+      - [x] Return an error and last buildable version in case of conflict
+      - [x] Supply version in option, by default latest version.
 - [_] Implem Two Phases store first version
       - [x] Supply time optionnaly to Save a bucket
       - [x] Does Updated criteria should match created but not updated buckets ? => NO
@@ -27,8 +31,9 @@
             - A commited bucket was imported into rested service and ephemeral parts were deleted.
             - Updating a commited bucket need an import back from rested into ephemeral service if it does not exists yet.
       - [x] Test Names()
-      - [x] Test Bucket Commit Then Get Then Update then Get 
-      - [_] Test Commit Get Update on different partitions (with conflicts)
+      - [x] Test Bucket Commit Then Get Then Update then Get
+      - [x] Test Commit Get Update on different partitions (with conflicts)
+      - [_] Return an error on bucket.Project() if conflict.
 - [_] For now use a Symbolic Zip & Encrypt methode: "Zip[<DATA>] ; Encrypt[<DATA>] for test purpose.
 - [_] Add Store / Service Snapshot() HOW ?
 - [_] Add idx export / import unittests (especially with hashed keys)
