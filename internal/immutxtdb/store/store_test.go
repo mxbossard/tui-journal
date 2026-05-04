@@ -875,7 +875,7 @@ func TestStore_Commit_Conflict_1Store(t *testing.T) {
 	// 2 Conflicting commits in same store
 	// - First save should store layer 2 in ephemeral store
 	// - Second save should store layer 3 in ephemeral store
-	// - First commit add 2 layers in rested store then clear ephemeral store
+	// - First commit add both layers in rested store then clear ephemeral store
 	// - Second commit should do nothing
 	// => should not conflict, versions should be nicely ordered.
 
@@ -977,6 +977,13 @@ func TestStore_Commit_Conflict_1Store(t *testing.T) {
 }
 
 func TestStore_Commit_Conflict_1Part(t *testing.T) {
+	// 2 Conflicting commits in two stores (sharing rested dir) using same part
+	// - First save should store layer 2a in ephemeral store A
+	// - Second save should store layer 2b in ephemeral store B
+	// - First commit add layer 2a in rested store then clear ephemeral store A
+	// - Second commit add layer 2b in rested store then clear ephemeral store B
+	// => Projecting last layer of bucket from both stores should conflict
+
 	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpEDir1)
 	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
@@ -1094,6 +1101,14 @@ func TestStore_Commit_Conflict_1Part(t *testing.T) {
 }
 
 func TestStore_Commit_Conflict_2Parts(t *testing.T) {
+	// Same behavior than 1 part ?
+	// 2 Conflicting commits in two stores (sharing rested dir) using two parts
+	// - First save should store layer 2a in ephemeral store A
+	// - Second save should store layer 2b in ephemeral store B
+	// - First commit add layer 2a in rested store then clear ephemeral store A
+	// - Second commit add layer 2b in rested store then clear ephemeral store B
+	// => Projecting last layer of bucket from both stores should conflict
+
 	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpEDir1)
 	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
