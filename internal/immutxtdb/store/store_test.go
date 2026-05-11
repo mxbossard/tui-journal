@@ -879,6 +879,12 @@ func TestStore_Commit_Conflict_1Store(t *testing.T) {
 	// - Second commit should do nothing
 	// => should not conflict, versions should be nicely ordered.
 
+	// 2 identical buckets performs concurrent commits
+	// We expect resilience, we expect both versions stored
+	// Do we expect each buckets to work properly (projecting text) ?
+	// Do we expect each buckets conflicting ?
+	// We don't want a bucket silenting another bucket commit !
+
 	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpEDir1)
 	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
@@ -899,7 +905,7 @@ func TestStore_Commit_Conflict_1Store(t *testing.T) {
 	expectedNameB := "bB"
 	expectedTxtB1 := ztring.LoremIpsumWords(10)
 
-	// bA
+	// bA not used
 	t1 := timez.ParseYyyyMmDd("2026-05-01")
 	bA := s1.NewBucket(expectedNameA, expectedLabels)
 	assert.NotNil(t, bA)
@@ -914,9 +920,9 @@ func TestStore_Commit_Conflict_1Store(t *testing.T) {
 	assert.NotNil(t, bB)
 	err = bB.SetText(expectedTxtB1)
 	assert.NoError(t, err)
-	err = s1.Save(bB, t2)
+	err = s1.Save(bB, t2) // => 1 layer in ephemeral store
 	assert.NoError(t, err)
-	err = s1.Commit(bB, false)
+	err = s1.Commit(bB, false) // => 1 layer in rested store
 	assert.NoError(t, err)
 
 	// Get bB1 from s1
@@ -930,8 +936,26 @@ func TestStore_Commit_Conflict_1Store(t *testing.T) {
 	t3 := timez.ParseYyyyMmDd("2026-05-03")
 	err = bB1.SetText(expectedTxtB1 + "update1")
 	assert.NoError(t, err)
-	err = s1.Save(bB1, t3) // Save bB1 in ephemeral store (add a diff layer)
+	err = s1.Save(bB1, t3) // Save bB1 in ephemeral store (add a diff layer) => 2 layers in ephemeral store (L1: v1 ; L2: v2)
 	assert.NoError(t, err)
+
+	// Check bB1 layers
+	bB1check, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB1check)
+	layerIt, err := bB1check.LayerIt()
+	assert.NoError(t, err)
+	errs, bB1Layers := iterz.Flatten2(layerIt)
+	assert.Len(t, errs, 2)
+	assert.Equal(t, []error{nil, nil}, errs)
+	assert.Len(t, bB1Layers, 2)
+	require.True(t, len(bB1Layers) >= 1)
+	assert.Equal(t, bucket.Version(1), bB1Layers[0].Metadata.Version)
+	require.True(t, len(bB1Layers) >= 2)
+	assert.Equal(t, bucket.Version(2), bB1Layers[1].Metadata.Version)
+	txt, err = bB1check.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
 
 	// Get bB2 from s1
 	bB2, err := s1.Get(bB.Header.Uid)
@@ -940,15 +964,36 @@ func TestStore_Commit_Conflict_1Store(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxtB1+"update1", txt)
 
-	// Update bB2 from s1
+	// Update bB2 from s1 should not conflict
 	t4 := timez.ParseYyyyMmDd("2026-05-04")
 	err = bB2.SetText(expectedTxtB1 + "update2")
 	assert.NoError(t, err)
-	err = s1.Save(bB2, t4) // Save bB2 in ephemeral store (add a diff layer)
+	err = s1.Save(bB2, t4) // Save bB2 in ephemeral store (add a diff layer) => 3 layers in ephemeral store (L1: v1 ; L2: v2 ; L3: v3)
 	assert.NoError(t, err)
 
+	// Check bB2 layers
+	bB2check, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB2check)
+	layerIt2, err := bB2check.LayerIt()
+	assert.NoError(t, err)
+	errs, bB2Layers := iterz.Flatten2(layerIt2)
+	assert.Len(t, errs, 3)
+	assert.Equal(t, []error{nil, nil, nil}, errs)
+	assert.Len(t, bB2Layers, 3)
+	require.True(t, len(bB2Layers) >= 1)
+	assert.Equal(t, bucket.Version(1), bB2Layers[0].Metadata.Version)
+	require.True(t, len(bB2Layers) >= 2)
+	assert.Equal(t, bucket.Version(2), bB2Layers[1].Metadata.Version)
+	require.True(t, len(bB2Layers) >= 3)
+	assert.Equal(t, bucket.Version(3), bB2Layers[2].Metadata.Version)
+	txt, err = bB2check.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+
+
 	// Commit bB1 in s1
-	err = s1.Commit(bB1, false)
+	err = s1.Commit(bB1, false) // => Copy all 3 ephemeral layers in rested store
 	assert.NoError(t, err)
 	txt, err = bB1.ProjectText()
 	assert.NoError(t, err)
