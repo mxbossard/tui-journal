@@ -45,7 +45,8 @@ const (
 )
 
 var (
-	ErrNotExist = errors.New("bucket do not exists")
+	ErrNotExist         = errors.New("bucket do not exists")
+	ErrVersionMissmatch = errors.New("bucket version missmatch")
 )
 
 var (
@@ -251,7 +252,7 @@ func (s *bucketService) create(b *Bucket, partition string, t time.Time) error {
 func (s *bucketService) update(b *Bucket, partition string, t time.Time) error {
 	// now := time.Now()
 
-	// TODO: 1- Attempt to make a patch of the update.
+	// 1- Attempt to make a patch of the update.
 	var rootLayer, diffLayer bool
 	var data []byte
 	var dataLen int
@@ -306,7 +307,7 @@ func (s *bucketService) update(b *Bucket, partition string, t time.Time) error {
 		Updated: &t,
 	}
 
-	// TODO: 2- Add (RhUid, headerRef) in headerRef Idx if Header changed
+	// 2- Add (RhUid, headerRef) in headerRef Idx if Header changed
 	if b.Header.changed {
 		b.Header.Modified = &t
 
@@ -337,7 +338,6 @@ func (s *bucketService) update(b *Bucket, partition string, t time.Time) error {
 		State:    brEntry.State(),
 	}
 
-	// panic("not implemented yet")
 	b.maxLoadedVersion = newMetadata.Version
 	b.loadedBucketEntries[PartedVersion{newMetadata.Version, partition}] = &brEntry
 	b.loadedMetadatas[PartedVersion{newMetadata.Version, partition}] = newMetadata
@@ -365,9 +365,36 @@ func (s *bucketService) Save(b *Bucket, partition string, t ...time.Time) error 
 	}
 
 	// 1- Check if supplied bucket already exists
-	if b.Metadata == nil {
-		return s.create(b, partition, operationTime)
+	// if b.Metadata == nil {
+	// 	return s.create(b, partition, operationTime)
+	// }
+	// return s.update(b, partition, operationTime)
+
+	var stored *Bucket
+	var err error
+	if b.Metadata != nil {
+		stored, err = s.Get(b.Metadata.Uid)
 	}
+	if b.Metadata == nil || err == ErrNotExist {
+		// swallow ErrNotExist and create the bucket
+		return s.create(b, partition, operationTime)
+	} else if err != nil {
+		return err
+	}
+
+	// 2- Check if supplied bucket version is equal to stored bucket version
+	// Need to check the last version in the partition for consistency ?
+	stored, err = s.Get(b.Metadata.Uid)
+	if err == ErrNotExist {
+		// swallow not exist error it means the bucket is first save in this partition
+		err = nil
+	} else if err != nil {
+		return err
+	}
+	if stored != nil && b.Metadata.Version != stored.Metadata.Version {
+		return ErrVersionMissmatch
+	}
+
 	return s.update(b, partition, operationTime)
 }
 
@@ -428,19 +455,7 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 	// fmt.Printf("partitions to scan: %s\n", existingParts)
 	var lastHeaderAllParts *Header
 	for _, partition := range existingParts {
-		// TODO: get last header for all parts
-		headerRefIdx, err := getHeaderRefIndex(s.dir, s.salt, partition)
-		if err != nil {
-			return nil, err
-		}
-
-		// 1- Get last bucket header
-		headerPgnr, err := headerRefIdx.Paginate(uid, idx.BottomToTop)
-		if err != nil {
-			return nil, err
-		}
-
-		lastHeader, err := getLastBucketHeader(headerPgnr)
+		lastHeader, err := s.getLastHeader(uid, partition)
 		if err != nil && err != ErrNotExist {
 			return nil, err
 		}
@@ -456,6 +471,32 @@ func (s *bucketService) Get(uid BucketUid) (*Bucket, error) {
 	}
 
 	return s.buildLazyBucket(lastHeaderAllParts)
+}
+
+func (s *bucketService) getLastHeader(uid BucketUid, partition string) (*Header, error) {
+	// 0- get last header for all parts
+	headerRefIdx, err := getHeaderRefIndex(s.dir, s.salt, partition)
+	if err != nil {
+		return nil, err
+	}
+
+	// 1- Get last bucket header
+	headerPgnr, err := headerRefIdx.Paginate(uid, idx.BottomToTop)
+	if err != nil {
+		return nil, err
+	}
+
+	lastHeader, err := getLastBucketHeader(headerPgnr)
+	return lastHeader, err
+}
+
+// SHOULD not be used because it cannot be consistent (buckets are distributed on partitions)
+func (s *bucketService) get(uid BucketUid, partition string) (*Bucket, error) {
+	lastHeader, err := s.getLastHeader(uid, partition)
+	if err != nil {
+		return nil, err
+	}
+	return s.buildLazyBucket(lastHeader)
 }
 
 func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount int) (idx.Paginer[BucketUid, *Bucket], error) {

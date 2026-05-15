@@ -20,10 +20,13 @@
       - Need smarter filtering : (if one layer is found all the bucket must be loaded) 
       - On which terms filter ? times (creation, update), bucket states, bucket names ?, bucket uids ?
       - Ordering on time : YoungerFirst / OlderFirst
-- [_] Manage Bucket.Project() conflicts
+- [x] Manage Bucket.Project() conflicts
       - [x] Use negative versions as ref from LatestVersion => v-1 = ^HEAD = LatestVersion - 1
       - [x] Return an error and last buildable version in case of conflict
       - [x] Supply version in option, by default latest version.
+- [x] Return an ErrVersionMissmatch on Save() in case of version conflict 
+- [_] Check Bucket consistency on Import() (ErrVersionMissmatch)
+- [_] Manage & Test Bucket conflict resolution
 - [_] Implem Two Phases store first version
       - [x] Supply time optionnaly to Save a bucket
       - [x] Does Updated criteria should match created but not updated buckets ? => NO

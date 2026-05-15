@@ -8,6 +8,7 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/mxbossard/utilz/collectionz"
 	"github.com/mxbossard/utilz/filez"
+	"github.com/mxbossard/utilz/fz"
 	"github.com/mxbossard/utilz/iterz"
 	"github.com/mxbossard/utilz/ztring"
 	"github.com/stretchr/testify/assert"
@@ -1147,7 +1148,7 @@ func TestBucketService_ConcurrentSave_SameServiceSamePart_MustConflict(t *testin
 	// Save bkt 1b MUST conflict
 	err = svc.Save(bkt1b, expectedPartition1)
 	assert.Error(t, err)
-	assert.Equal(t, ErrVersionConflict, err)
+	assert.Equal(t, ErrVersionMissmatch, err)
 	// // Check layer count (a second layer should be added)
 	// itB, err = bkt1b.LayerIt()
 	// assert.NoError(t, err)
@@ -1185,7 +1186,7 @@ func TestBucketService_ConcurrentSave_SameServiceSamePart_MustConflict(t *testin
 	assert.Equal(t, expectedMsg1, txt)
 }
 
-func TestBucketService_ConcurrentSave_SameServiceTwoParts_MustNotConflict(t *testing.T) {
+func TestBucketService_ConcurrentSave_SameServiceTwoParts_MustConflict(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpDir)
 
@@ -1242,20 +1243,20 @@ func TestBucketService_ConcurrentSave_SameServiceTwoParts_MustNotConflict(t *tes
 	err = svc.Save(bkt1a, expectedPartition1)
 	assert.NoError(t, err)
 
-	// Save bkt 1b MUST NOT conflict
+	// Save bkt 1b MUST conflict
 	err = svc.Save(bkt1b, expectedPartition2)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Equal(t, ErrVersionMissmatch, err)
 
 	// Get the bucket with conflicting saves
 	bkt1c, err := svc.Get(bkt1.Header.Uid)
 	assert.NoError(t, err)
 	require.NotNil(t, bkt1c)
 
-	// Last version MUST conflict
+	// Last version MUST NOT conflict
 	txt, err = bkt1c.ProjectText(LatestVersion)
-	assert.Error(t, err)
-	assert.Equal(t, ErrVersionConflict, err)
-	assert.Equal(t, expectedMsg1, txt)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg1a, txt)
 
 	// Check text of not conflicting version
 	txt, err = bkt1c.ProjectText(-1)
@@ -1264,14 +1265,18 @@ func TestBucketService_ConcurrentSave_SameServiceTwoParts_MustNotConflict(t *tes
 
 }
 
-func TestBucketService_ConcurrentSave_TwoServicesTwoDirs_MustNotConflict(t *testing.T) {
-	t.Skip("No purpose to this test")
+// Saving in two different services MUST NOT conflicts
+// Projecting merged services MUST conflict
+func TestBucketService_ConcurrentSave_TwoServicesTwoPartsMerged_MustConflict(t *testing.T) {
 	tmpDir1 := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpDir1)
 	tmpDir2 := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpDir2)
+	tmpDir3 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpDir3)
 
-	expectedPartition := "device1"
+	expectedPartition1 := "device1"
+	expectedPartition2 := "device2"
 	expectedSalt := "salt"
 	expectedName := "foo"
 	expectedMsg1 := ztring.LoremIpsumWords(10)
@@ -1285,9 +1290,6 @@ func TestBucketService_ConcurrentSave_TwoServicesTwoDirs_MustNotConflict(t *test
 	svc1, err := NewBucketService(tmpDir1, expectedSalt)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc1)
-	svc2, err := NewBucketService(tmpDir2, expectedSalt)
-	assert.NoError(t, err)
-	assert.NotNil(t, svc2)
 
 	bkt1 := svc1.New(expectedName, expectedLabels)
 	assert.NotNil(t, bkt1)
@@ -1298,8 +1300,15 @@ func TestBucketService_ConcurrentSave_TwoServicesTwoDirs_MustNotConflict(t *test
 	err = bkt1.SetText(expectedMsg1)
 	assert.NoError(t, err)
 	assert.Nil(t, bkt1.Metadata)
-	err = svc1.Save(bkt1, expectedPartition)
+	err = svc1.Save(bkt1, expectedPartition1)
 	assert.NoError(t, err)
+
+	// Copy svc1 files into svc2 dir
+	fz.CopyDirOrPanic(tmpDir1, tmpDir2, true)
+
+	svc2, err := NewBucketService(tmpDir2, expectedSalt)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc2)
 
 	// Retrieve Bkt1 2 times and perform two concurrent saves
 	bkt1a, err := svc1.Get(bkt1.Header.Uid)
@@ -1309,7 +1318,7 @@ func TestBucketService_ConcurrentSave_TwoServicesTwoDirs_MustNotConflict(t *test
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg1, txt)
 
-	bkt1b, err := svc1.Get(bkt1.Header.Uid)
+	bkt1b, err := svc2.Get(bkt1.Header.Uid)
 	assert.NoError(t, err)
 	require.NotNil(t, bkt1b)
 	txt, err = bkt1b.ProjectText(LatestVersion)
@@ -1323,11 +1332,11 @@ func TestBucketService_ConcurrentSave_TwoServicesTwoDirs_MustNotConflict(t *test
 	assert.NoError(t, err)
 
 	// Save bkt 1a
-	err = svc1.Save(bkt1a, expectedPartition)
+	err = svc1.Save(bkt1a, expectedPartition1)
 	assert.NoError(t, err)
 
 	// Save bkt 1b
-	err = svc2.Save(bkt1b, expectedPartition)
+	err = svc2.Save(bkt1b, expectedPartition2)
 	assert.NoError(t, err)
 
 	// Get the bucket 1a
@@ -1359,9 +1368,54 @@ func TestBucketService_ConcurrentSave_TwoServicesTwoDirs_MustNotConflict(t *test
 	txt, err = bkt1d.ProjectText(-1)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMsg1, txt)
+
+	// Copy svc1 files into svc2 dir (Test updating files of opened service)
+	fz.CopyDirOrPanic(tmpDir1, tmpDir2, false)
+
+	// Get the bucket 1b after merging 2 service files
+	bkt1e, err := svc2.Get(bkt1.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bkt1e)
+
+	// Last version must be latest OK saved
+	txt, err = bkt1e.ProjectText(LatestVersion)
+	assert.Error(t, err)
+	assert.Equal(t, ErrVersionConflict, err)
+	assert.Equal(t, expectedMsg1, txt)
+
+	// Check text of not conflicting version
+	txt, err = bkt1d.ProjectText(-1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg1, txt)
+
+	// Copy svc1 & svc2 files in a new merged service
+	fz.CopyDirOrPanic(tmpDir1, tmpDir3, false)
+	fz.CopyDirOrPanic(tmpDir2, tmpDir3, false)
+
+	svc3, err := NewBucketService(tmpDir3, expectedSalt)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc3)
+
+	// Get the bucket 1b after merging 2 service files
+	bkt1f, err := svc3.Get(bkt1.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bkt1f)
+
+	// Last version must be latest OK saved
+	txt, err = bkt1f.ProjectText(LatestVersion)
+	assert.Error(t, err)
+	assert.Equal(t, ErrVersionConflict, err)
+	assert.Equal(t, expectedMsg1, txt)
+
+	// Check text of not conflicting version
+	txt, err = bkt1f.ProjectText(-1)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedMsg1, txt)
 }
 
+// Deprecated
 func TestBucketService_EditMultiParts_Conflict(t *testing.T) {
+	t.Skip("deprecated")
 	tmpDir := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpDir)
 
