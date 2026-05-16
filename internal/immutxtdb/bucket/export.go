@@ -88,33 +88,80 @@ func (s *bucketService) Import(export *BucketExport, partition string) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
+	if len(export.headers) == 0 {
+		return fmt.Errorf("bad export without header")
+	}
+
+	bUid := export.headers[0].Uid
+	existing, err := s.Get(bUid)
+	if err == ErrNotExist {
+		// No bucket exists for now => swallow error
+		err = nil
+	} else if err != nil {
+		return err
+	}
+
+	var lastStoredLayerVersion Version
+	if existing != nil {
+		// Check imported bucket version is higher than stored one
+		// if existing.Metadata.Version > export.metadata.Version {
+		// 	return ErrVersionMissmatch
+		// } else if existing.Metadata.Version == export.metadata.Version {
+		// TODO compare each layer hash
+		storedIt, err := existing.LayerIt()
+		if err != nil {
+			return err
+		}
+		k := 0
+		for err, storedLayer := range storedIt {
+			if err != nil {
+				return err
+			}
+			if len(export.layers) < k+1 {
+				// FIXME: should we return an ErrInconsistentLayers ?
+				return ErrVersionMissmatch
+			}
+			exportLayer := export.layers[k]
+			if !storedLayer.Equals(exportLayer) {
+				return ErrInconsistentLayers
+			}
+			lastStoredLayerVersion = storedLayer.Metadata.Version
+			k++
+		}
+		// }
+	}
+
 	// FIXME: use idx.Import ?
 
-	// FIXME: keep uid ? Or generate a new one ?
-	// FIXME: which timing to use ? Keep original timings ?
 	b := newBucket(s)
-	b.Header = *export.headers[0]
+	b.Header = *export.headers[len(export.headers)-1] // Take last header
 	b.Header.Name = export.name
 	b.Metadata = export.metadata
 
-	// 1- Store bucketName
-	err := s.addName(partition, *b.Header.Created, b.Header.Name, b.Header.Uid)
-	if err != nil {
-		return fmt.Errorf("import: unable to add Name: %w", err)
-	}
-
-	// 2- Store header (COULD have multiple entries)
-	_, err = s.addHeader(partition, dummyState, &b.Header)
-	if err != nil {
-		b.Header.Created = nil
-		return fmt.Errorf("import: unable to add Header: %w", err)
-	}
-
-	// 3- Store All Layers & Metadatas
-	for _, l := range export.layers {
-		_, err := s.addLayer(partition, l.State, b.Header.Uid, l.Metadata, l.Content)
+	if existing == nil || b.Header.Name != existing.Header.Name {
+		// 1- Store bucketName if bucket do not exists or was renamed
+		err = s.addName(partition, *b.Header.Created, b.Header.Name, b.Header.Uid)
 		if err != nil {
-			return fmt.Errorf("create: unable to add Layer: %w", err)
+			return fmt.Errorf("import: unable to add Name: %w", err)
+		}
+	}
+
+	if existing == nil || b.Header.changed {
+		// 2- Store header (COULD have multiple entries) if bucket do not exists or header changed
+		_, err = s.addHeader(partition, dummyState, &b.Header)
+		if err != nil {
+			b.Header.Created = nil
+			return fmt.Errorf("import: unable to add Header: %w", err)
+		}
+	}
+
+	// 3- Store All Layers & Metadatas whith a higher version than previous storeed layers.
+	for _, l := range export.layers {
+		if l.Metadata.Version > lastStoredLayerVersion {
+			_, err := s.addLayer(partition, l.State, b.Header.Uid, l.Metadata, l.Content)
+			if err != nil {
+				return fmt.Errorf("create: unable to add Layer: %w", err)
+			}
 		}
 	}
 

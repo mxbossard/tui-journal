@@ -58,14 +58,6 @@ type Metadata struct {
 	Size    int
 }
 
-type Layer struct {
-	Metadata *Metadata
-	Content  []byte
-	State    idx.State
-	//Commited   bool
-	//Snapshoted bool
-}
-
 // Store Bucket metadata which rarely changes
 type Header struct {
 	Uid      BucketUid

@@ -6,6 +6,7 @@
   - 2 concurrent save in different partitions => ErrVersionMissmatch
 - Importing a Bucket which already exists
   - imported version must be greater than stored version OR => ErrVersionMissmatch
+  - Return an error if attempting to import a bucket with exactly same version ?
 - Projecting a Bucket with 2 layers of identical version (following merged files of different partitions)
 
 ## Two Phase Store conflicts

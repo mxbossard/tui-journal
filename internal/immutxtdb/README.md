@@ -25,7 +25,11 @@
       - [x] Return an error and last buildable version in case of conflict
       - [x] Supply version in option, by default latest version.
 - [x] Return an ErrVersionMissmatch on Save() in case of version conflict 
-- [_] Check Bucket consistency on Import() (ErrVersionMissmatch)
+- [x] Check Bucket consistency on Import() (ErrVersionMissmatch)
+      - [x] Test Import a Bucket with version < already imported
+      - [x] Test Import a Bucket twice
+      - [x] Test Import a Bucket with same uid but different layers
+      - [x] Test Successive imports consistency
 - [_] Manage & Test Bucket conflict resolution
 - [_] Implem Two Phases store first version
       - [x] Supply time optionnaly to Save a bucket

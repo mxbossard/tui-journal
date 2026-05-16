@@ -45,8 +45,9 @@ const (
 )
 
 var (
-	ErrNotExist         = errors.New("bucket do not exists")
-	ErrVersionMissmatch = errors.New("bucket version missmatch")
+	ErrNotExist           = errors.New("bucket do not exists")
+	ErrVersionMissmatch   = errors.New("bucket version missmatch")
+	ErrInconsistentLayers = errors.New("bucket layers not consistent")
 )
 
 var (

@@ -6,6 +6,7 @@ import (
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/bucket"
 	"github.com/mxbossard/utilz/filez"
+	"github.com/mxbossard/utilz/fz"
 	"github.com/mxbossard/utilz/iterz"
 	"github.com/mxbossard/utilz/timez"
 	"github.com/mxbossard/utilz/ztring"
@@ -871,7 +872,351 @@ func TestStore_Commit_Get_Update_Get(t *testing.T) {
 	assert.Equal(t, expectedTxtB1+"update3", txt)
 }
 
+func TestStore_ConcurrentSave_SameStore_MustConflict(t *testing.T) {
+	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir1)
+	tmpRDir := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir)
+
+	expectedPart1 := "device1"
+
+	// Use a first service
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir, expectedPart1, "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s1)
+
+	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedNameA := "bA"
+	expectedTxtA1 := ztring.LoremIpsumWords(2)
+	expectedNameB := "bB"
+	expectedTxtB1 := ztring.LoremIpsumWords(10)
+
+	// bA not used
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
+	bA := s1.NewBucket(expectedNameA, expectedLabels)
+	assert.NotNil(t, bA)
+	err = bA.SetText(expectedTxtA1)
+	assert.NoError(t, err)
+	err = s1.Save(bA, t1)
+	assert.NoError(t, err)
+
+	// Save bB
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
+	bB := s1.NewBucket(expectedNameB, expectedLabels)
+	assert.NotNil(t, bB)
+	err = bB.SetText(expectedTxtB1)
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2) // => 1 layer in ephemeral store
+	assert.NoError(t, err)
+
+	// Get bB1 from s1
+	bB1, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err := bB1.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Get bB2 from s1
+	bB2, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Update bB1 from s1
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
+	err = bB1.SetText(expectedTxtB1 + "update1")
+	assert.NoError(t, err)
+	err = s1.Save(bB1, t3) // Save bB1 in ephemeral store (add a diff layer) => 2 layers in ephemeral store (L1: v1 ; L2: v2)
+	assert.NoError(t, err)
+
+	// Check bB1 layers
+	bB1check, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB1check)
+	layerIt, err := bB1check.LayerIt()
+	assert.NoError(t, err)
+	errs, bB1Layers := iterz.Flatten2(layerIt)
+	assert.Len(t, errs, 2)
+	assert.Equal(t, []error{nil, nil}, errs)
+	assert.Len(t, bB1Layers, 2)
+	require.True(t, len(bB1Layers) >= 1)
+	assert.Equal(t, bucket.Version(1), bB1Layers[0].Metadata.Version)
+	require.True(t, len(bB1Layers) >= 2)
+	assert.Equal(t, bucket.Version(2), bB1Layers[1].Metadata.Version)
+	txt, err = bB1check.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+
+	// Update bB2 from s1 MUST conflict
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
+	err = bB2.SetText(expectedTxtB1 + "update2")
+	assert.NoError(t, err)
+	err = s1.Save(bB2, t4) // Save bB2 in ephemeral store (add a diff layer) => 3 layers in ephemeral store (L1: v1 ; L2: v2 ; L3: v3)
+	assert.Error(t, err)
+	assert.Equal(t, bucket.ErrVersionMissmatch, err)
+}
+
+// Saving in two different stores MUST NOT conflicts
+// Projecting merged stores MUST conflict
+func TestStore_ConcurrentSave_TwoStoresMerged_MustConflict(t *testing.T) {
+	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir1)
+	tmpRDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir1)
+	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir2)
+	tmpRDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir2)
+
+	expectedPart1 := "device1"
+	expectedPart2 := "device2"
+
+	// Use a first service
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir1, expectedPart1, "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s1)
+
+	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedNameA := "bA"
+	expectedTxtA1 := ztring.LoremIpsumWords(2)
+	expectedNameB := "bB"
+	expectedTxtB1 := ztring.LoremIpsumWords(10)
+
+	// bA not used
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
+	bA := s1.NewBucket(expectedNameA, expectedLabels)
+	assert.NotNil(t, bA)
+	err = bA.SetText(expectedTxtA1)
+	assert.NoError(t, err)
+	err = s1.Save(bA, t1)
+	assert.NoError(t, err)
+
+	// Save bB
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
+	bB := s1.NewBucket(expectedNameB, expectedLabels)
+	assert.NotNil(t, bB)
+	err = bB.SetText(expectedTxtB1)
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2) // => 1 layer in ephemeral store
+	assert.NoError(t, err)
+
+	// Copy store1 files into store2 dirs
+	fz.CopyDirOrPanic(tmpEDir1, tmpEDir2, false)
+	fz.CopyDirOrPanic(tmpRDir1, tmpRDir2, false)
+	// Build a second service
+	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir2, expectedPart2, "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s2)
+
+	// Get bB1 from s1
+	bB1, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err := bB1.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Get bB2 from s2
+	bB2, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Update bB1 from s1
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
+	err = bB1.SetText(expectedTxtB1 + "update1")
+	assert.NoError(t, err)
+	err = s1.Save(bB1, t3) // Save bB1 in ephemeral store (add a diff layer) => 2 layers in ephemeral store (L1: v1 ; L2: v2)
+	assert.NoError(t, err)
+
+	// Check bB1 layers
+	bB1check, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB1check)
+	layerIt, err := bB1check.LayerIt()
+	assert.NoError(t, err)
+	errs, bB1Layers := iterz.Flatten2(layerIt)
+	assert.Len(t, errs, 2)
+	assert.Equal(t, []error{nil, nil}, errs)
+	assert.Len(t, bB1Layers, 2)
+	require.True(t, len(bB1Layers) >= 1)
+	assert.Equal(t, bucket.Version(1), bB1Layers[0].Metadata.Version)
+	require.True(t, len(bB1Layers) >= 2)
+	assert.Equal(t, bucket.Version(2), bB1Layers[1].Metadata.Version)
+	txt, err = bB1check.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+
+	// Update bB2 from s2 MUST NOT conflict
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
+	err = bB2.SetText(expectedTxtB1 + "update2")
+	assert.NoError(t, err)
+	err = s2.Save(bB2, t4) // Save bB2 in ephemeral store (add a diff layer) => 3 layers in ephemeral store (L1: v1 ; L2: v2 ; L3: v3)
+	assert.NoError(t, err)
+
+	// Check bB2 layers
+	bB2check, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB2check)
+	layerIt, err = bB2check.LayerIt()
+	assert.NoError(t, err)
+	errs, bB2Layers := iterz.Flatten2(layerIt)
+	assert.Len(t, errs, 2)
+	assert.Equal(t, []error{nil, nil}, errs)
+	assert.Len(t, bB2Layers, 2)
+	require.True(t, len(bB2Layers) >= 1)
+	assert.Equal(t, bucket.Version(1), bB2Layers[0].Metadata.Version)
+	require.True(t, len(bB2Layers) >= 2)
+	assert.Equal(t, bucket.Version(2), bB2Layers[1].Metadata.Version)
+	txt, err = bB2check.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+}
+
+// Commiting in two different stores MUST NOT conflicts
+// Projecting merged stores MUST conflict
+func TestStore_ConcurrentCommit_TwoStoresMerged_MustConflict(t *testing.T) {
+	tmpEDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir1)
+	tmpRDir1 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir1)
+	tmpEDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpEDir2)
+	tmpRDir2 := filez.MkdirTempOrPanic(t.Name())
+	defer os.RemoveAll(tmpRDir2)
+
+	expectedPart1 := "device1"
+	expectedPart2 := "device2"
+
+	// Use a first service
+	s1, err := NewTwoPhasesStore(tmpEDir1, tmpRDir1, expectedPart1, "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s1)
+
+	expectedLabels := bucket.NewLabels("foo", "bar")
+	expectedNameA := "bA"
+	expectedTxtA1 := ztring.LoremIpsumWords(2)
+	expectedNameB := "bB"
+	expectedTxtB1 := ztring.LoremIpsumWords(10)
+
+	// bA not used
+	t1 := timez.ParseYyyyMmDd("2026-05-01")
+	bA := s1.NewBucket(expectedNameA, expectedLabels)
+	assert.NotNil(t, bA)
+	err = bA.SetText(expectedTxtA1)
+	assert.NoError(t, err)
+	err = s1.Save(bA, t1)
+	assert.NoError(t, err)
+	err = s1.Commit(bA, false)
+	assert.NoError(t, err)
+
+	// Save bB
+	t2 := timez.ParseYyyyMmDd("2026-05-02")
+	bB := s1.NewBucket(expectedNameB, expectedLabels)
+	assert.NotNil(t, bB)
+	err = bB.SetText(expectedTxtB1)
+	assert.NoError(t, err)
+	err = s1.Save(bB, t2)
+	assert.NoError(t, err)
+	err = s1.Commit(bB, false)
+	assert.NoError(t, err)
+
+	// Copy store1 files into store2 dirs
+	fz.CopyDirOrPanic(tmpEDir1, tmpEDir2, false)
+	fz.CopyDirOrPanic(tmpRDir1, tmpRDir2, false)
+	// Build a second service
+	s2, err := NewTwoPhasesStore(tmpEDir2, tmpRDir2, expectedPart2, "salt")
+	assert.NoError(t, err)
+	assert.NotNil(t, s2)
+
+	// Get bB1 from s1
+	bB1, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err := bB1.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Get bB2 from s2
+	bB2, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	txt, err = bB2.ProjectText(bucket.LatestVersion)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1, txt)
+
+	// Update bB1 from s1
+	t3 := timez.ParseYyyyMmDd("2026-05-03")
+	err = bB1.SetText(expectedTxtB1 + "update1")
+	assert.NoError(t, err)
+	err = s1.Save(bB1, t3) // Save bB1 in ephemeral store (add a diff layer) => 2 layers in ephemeral store (L1: v1 ; L2: v2)
+	assert.NoError(t, err)
+
+	// Check bB1 layers
+	bB1check, err := s1.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB1check)
+	layerIt, err := bB1check.LayerIt()
+	assert.NoError(t, err)
+	errs, bB1Layers := iterz.Flatten2(layerIt)
+	assert.Len(t, errs, 2)
+	assert.Equal(t, []error{nil, nil}, errs)
+	assert.Len(t, bB1Layers, 2)
+	require.True(t, len(bB1Layers) >= 1)
+	assert.Equal(t, bucket.Version(1), bB1Layers[0].Metadata.Version)
+	require.True(t, len(bB1Layers) >= 2)
+	assert.Equal(t, bucket.Version(2), bB1Layers[1].Metadata.Version)
+	txt, err = bB1check.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+
+	// Update bB2 from s2 MUST NOT conflict
+	t4 := timez.ParseYyyyMmDd("2026-05-04")
+	err = bB2.SetText(expectedTxtB1 + "update2")
+	assert.NoError(t, err)
+	err = s2.Save(bB2, t4) // Save bB2 in ephemeral store (add a diff layer) => 3 layers in ephemeral store (L1: v1 ; L2: v2 ; L3: v3)
+	assert.NoError(t, err)
+
+	// Check bB2 layers
+	bB2check, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB2check)
+	layerIt, err = bB2check.LayerIt()
+	assert.NoError(t, err)
+	errs, bB2Layers := iterz.Flatten2(layerIt)
+	assert.Len(t, errs, 2)
+	assert.Equal(t, []error{nil, nil}, errs)
+	assert.Len(t, bB2Layers, 2)
+	require.True(t, len(bB2Layers) >= 1)
+	assert.Equal(t, bucket.Version(1), bB2Layers[0].Metadata.Version)
+	require.True(t, len(bB2Layers) >= 2)
+	assert.Equal(t, bucket.Version(2), bB2Layers[1].Metadata.Version)
+	txt, err = bB2check.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+
+	// Commit bB1
+	err = s1.Commit(bB2, false)
+	assert.NoError(t, err)
+
+	// Merge store1 files into store2 dirs
+	fz.CopyDirOrPanic(tmpEDir1, tmpEDir2, false)
+	fz.CopyDirOrPanic(tmpRDir1, tmpRDir2, false)
+
+	// Commit bB2 MUST conflict
+	err = s2.Commit(bB2, false)
+	assert.Error(t, err)
+	assert.Equal(t, bucket.ErrVersionConflict, err)
+
+	bC, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bC)
+	txt, err = bC.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update1", txt)
+}
+
 func TestStore_Commit_Conflict_1store_1part(t *testing.T) {
+	t.Skip("deprecated")
 	// 2 Conflicting commits in same store
 	// - First save should store layer 2 in ephemeral store
 	// - Second save should store layer 3 in ephemeral store
@@ -991,7 +1336,6 @@ func TestStore_Commit_Conflict_1store_1part(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxtB1+"update2", txt)
 
-
 	// Commit bB1 in s1
 	err = s1.Commit(bB1, false) // => Copy all 3 ephemeral layers in rested store
 	assert.NoError(t, err)
@@ -1022,6 +1366,7 @@ func TestStore_Commit_Conflict_1store_1part(t *testing.T) {
 }
 
 func TestStore_Commit_Conflict_2store_1part(t *testing.T) {
+	t.Skip("deprecated")
 	// 2 Conflicting commits in two stores (sharing rested dir) using same part
 	// - First save should store layer 2a in ephemeral store A
 	// - Second save should store layer 2b in ephemeral store B
@@ -1146,6 +1491,7 @@ func TestStore_Commit_Conflict_2store_1part(t *testing.T) {
 }
 
 func TestStore_Commit_Conflict_2store_2parts(t *testing.T) {
+	t.Skip("deprecated")
 	// Same behavior than 1 part ?
 	// 2 Conflicting commits in two stores (sharing rested dir) using two parts
 	// - First save should store layer 2a in ephemeral store A
