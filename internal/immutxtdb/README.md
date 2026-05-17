@@ -42,6 +42,7 @@
       - [x] Test Commit Get Update on different partitions (with conflicts)
       - [_] Return an error on bucket.Project() if conflict.
 - [_] For now use a Symbolic Zip & Encrypt methode: "Zip[<DATA>] ; Encrypt[<DATA>] for test purpose.
+      - [_] Check bucket service files contents (notably for multiple imports)
 - [_] Add Store / Service Snapshot() HOW ?
 - [_] Add idx export / import unittests (especially with hashed keys)
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)

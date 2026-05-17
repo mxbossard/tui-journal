@@ -49,13 +49,13 @@ func (s TwoPhasesStore) NewBucket(name string, labels bucket.Labels) *bucket.Buc
 	return b
 }
 
-func ephemeralBucketPartition(b *bucket.Bucket) string {
-	return fmt.Sprintf("%x", b.Header.Uid)
+func (s TwoPhasesStore) ephemeralBucketPartition(b *bucket.Bucket) string {
+	return fmt.Sprintf("%s-%x", s.writePartition, b.Header.Uid)
 }
 
 // Save in ephemeral store at supplied time
 func (s TwoPhasesStore) Save(b *bucket.Bucket, t ...time.Time) error {
-	partition := ephemeralBucketPartition(b)
+	partition := s.ephemeralBucketPartition(b)
 	if b.Metadata != nil && b.Metadata.Version > 0 {
 		// For bucket save with version greater than 0
 		_, err := s.ephemeral.Get(b.Header.Uid)
@@ -116,7 +116,7 @@ func (s TwoPhasesStore) Commit(b *bucket.Bucket, squash bool) error {
 	}
 
 	// 2- After ephemeral import => erase ephemeral partition
-	partition := ephemeralBucketPartition(b)
+	partition := s.ephemeralBucketPartition(b)
 	s.ephemeral.ErasePartition(partition)
 
 	return err
