@@ -1075,8 +1075,8 @@ func TestStore_ConcurrentSave_TwoStoresMerged_MustConflict(t *testing.T) {
 	assert.Equal(t, expectedTxtB1+"update2", txt)
 
 	// Merge store1 files into store2 dirs => 2 concurrent Save MUST imply ProjectText() to conflict
-	filez.PrintTree(tmpEDir1)
-	filez.PrintTree(tmpEDir2)
+	// filez.PrintTree(tmpEDir1)
+	// filez.PrintTree(tmpEDir2)
 	fz.CopyDirOrPanic(tmpEDir1, tmpEDir2, false)
 	fz.CopyDirOrPanic(tmpRDir1, tmpRDir2, false)
 
@@ -1212,27 +1212,50 @@ func TestStore_ConcurrentCommit_TwoStoresMerged_MustConflict(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxtB1+"update2", txt)
 
-	// Commit bB2
+	// filez.PrintTree(tmpEDir1)
+
+	// Commit bB2 in svc1
 	err = s1.Commit(bB2, false)
 	assert.NoError(t, err)
 
-	// Merge store1 files into store2 dirs
-	fz.CopyDirOrPanic(tmpEDir1, tmpEDir2, false)
-	fz.CopyDirOrPanic(tmpRDir1, tmpRDir2, false)
+	// ReCommit bB2 in svc1
+	err = s1.Commit(bB2, false)
+	assert.ErrorIs(t, err, bucket.ErrNotExist)
 
-	// ReCommit bB2 MUST NOT conflict
+	// Commit bB2 in svc2 MUST NOT conflict
 	err = s2.Commit(bB2, false)
 	assert.NoError(t, err)
 
-	bC, err := s2.Get(bB.Header.Uid)
+	// Check bB2 content in svc1
+	bB2a, err := s1.Get(bB.Header.Uid)
 	assert.NoError(t, err)
-	require.NotNil(t, bC)
-	txt, err = bC.ProjectText()
+	require.NotNil(t, bB2a)
+	txt, err = bB2a.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxtB1+"update1", txt)
+
+	// Check bB2 content in svc2
+	bB2b, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB2b)
+	txt, err = bB2b.ProjectText()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedTxtB1+"update2", txt)
+
+	// Merge store1 files into store2 dirs
+	fz.CopyDirOrPanic(tmpRDir1, tmpRDir2, false)
+
+	// Check bB2 content in svc2 now MUST conflict
+	bB2c, err := s2.Get(bB.Header.Uid)
+	assert.NoError(t, err)
+	require.NotNil(t, bB2c)
+	txt, err = bB2c.ProjectText()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, bucket.ErrVersionConflict)
+	assert.Equal(t, expectedTxtB1, txt)
 }
 
-// -------------------- END ------------
+// -------------------- END -----------------
 
 func TestStore_Commit_Conflict_1store_1part(t *testing.T) {
 	t.Skip("deprecated")

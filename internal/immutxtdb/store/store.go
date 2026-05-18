@@ -108,18 +108,21 @@ func (s TwoPhasesStore) Commit(b *bucket.Bucket, squash bool) error {
 	// 1- Import ephemeral bucket in rested service
 	export, err := s.ephemeral.Export(b.Header.Uid, false, false, squash)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to export bucket: %w", err)
 	}
 	err = s.rested.Import(export, s.writePartition)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to import bucket: %w", err)
 	}
 
 	// 2- After ephemeral import => erase ephemeral partition
 	partition := s.ephemeralBucketPartition(b)
-	s.ephemeral.ErasePartition(partition)
+	err = s.ephemeral.ErasePartition(partition)
+	if err != nil {
+		return fmt.Errorf("unable to erase partition: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 // Return all Names associated with it's last Bucket Uid

@@ -731,6 +731,7 @@ func (s *bucketService) ErasePartition(partition string) error {
 	if err != nil {
 		return err
 	}
+	// fmt.Printf("\nRm dirs: %s ; %s ; %s ...\n\n", bucketNameIdxDir, headerRefIdxDir, bucketRefIdxDir)
 	err = os.RemoveAll(bucketNameIdxDir)
 	if err != nil {
 		return err

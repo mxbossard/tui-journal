@@ -31,7 +31,7 @@
       - [x] Test Import a Bucket with same uid but different layers
       - [x] Test Successive imports consistency
 - [_] Manage & Test Bucket conflict resolution
-- [_] Implem Two Phases store first version
+- [x] Implem Two Phases store first version
       - [x] Supply time optionnaly to Save a bucket
       - [x] Does Updated criteria should match created but not updated buckets ? => NO
       - [x] Manage Commited buckets + Update Merge
@@ -40,7 +40,7 @@
       - [x] Test Names()
       - [x] Test Bucket Commit Then Get Then Update then Get
       - [x] Test Commit Get Update on different partitions (with conflicts)
-      - [_] Return an error on bucket.Project() if conflict.
+      - [x] Return an error on bucket.Project() if conflict.
 - [_] For now use a Symbolic Zip & Encrypt methode: "Zip[<DATA>] ; Encrypt[<DATA>] for test purpose.
       - [_] Check bucket service files contents (notably for multiple imports)
 - [_] Add Store / Service Snapshot() HOW ?
