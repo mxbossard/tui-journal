@@ -4,25 +4,26 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"iter"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/bucket"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/index"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/store"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/ztring"
 )
 
 // Aggregation of layers
 type Dump struct {
-	model.Bucket
+	*bucket.Bucket
 }
 
 type Doc struct {
-	model.Bucket
+	*bucket.Bucket
 }
 
 type Layer string
@@ -154,8 +155,14 @@ func NewIdxService(dir, device, salt string) (*idxService, error) {
 	}, nil
 }
 
-func ForgeDumpName(device string, when time.Time) string {
-	return fmt.Sprintf("dump-%s-%d", device, when.Unix())
+func ForgeDumpName(when time.Time) string {
+	return fmt.Sprintf("dump-%d", when.Unix())
+}
+
+func ForgeDumpUid(when time.Time) bucket.BucketUid {
+	name := ForgeDumpName(when)
+	uid := bucket.DeterministicUid(name)
+	return uid
 }
 
 func GetBlocReader(ref *model.BlocRef) (*filez.Bloc, error) {
@@ -221,6 +228,64 @@ func project(b *model.Bucket) (txt string, err error) {
 // ------------- Dumps ---------------
 
 func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
+	// Get store
+	eDir := filepath.Join(dir, "ephemeral")
+	rDir := filepath.Join(dir, "rested")
+	s, err := store.NewTwoPhasesStore(eDir, rDir, device, salt)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+
+	// 0- Forge dump name
+	bUid := ForgeDumpUid(now)
+	name := ForgeDumpName(now)
+	var labels bucket.Labels
+
+	// FIXME: do we want each device to create a different bucket for the same daily Dump ?
+	// FIXME: do we want each device share the same bucket for same daily Dump ?
+	// TODO: we want a deterministic way to build the daily Dump bucket uid because bucket manage partitions for us.
+	// We want a way to pass a bucketUid to create a Bucket. We need to pass a name with it.
+	// Do we need to check if the bucketUid already exists ? Or do we return the bucket if it already exists ?
+	//     => We could use CreateOrGet(uid, name, labels) returning the existing bucket should the bucket be renamed ?
+	//        If the bucket we want to create already exists but have a different name, could return an error to prevent errors
+	// Bucket pkg SHOULD supply a way to generate good bucketUid supplying a Name
+	// If so, should we allow user to supply it's own bucketUid ?
+
+	// 1- Check if bucket already exists !
+	bkt, err := s.Get(bUid)
+	if err == store.ErrNotExist {
+		// swallow the error
+		err = nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	// 2- Create a bucket
+	if bkt == nil {
+		// bkt do not exists yet
+		bkt = s.CreateOrGetBucket(bUid, name, labels)
+	}
+
+	// 3- Store the content
+	err = bkt.SetText(txt)
+	if err != nil {
+		return nil, err
+	}
+	err = s.Save(bkt)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4- Build the entity to return
+	d := &Dump{
+		Bucket: bkt,
+	}
+	return d, nil
+}
+
+/*
+func UseCaseDump0_Create0(dir, salt, device, txt string) (*Dump, error) {
 	idxService, err := NewIdxService(dir, device, salt)
 	if err != nil {
 		return nil, err
@@ -228,7 +293,7 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 	now := time.Now()
 
 	// 0- Forge dump name
-	name := ForgeDumpName(device, now)
+	name := ForgeDumpName(now)
 
 	// FIXME: 1- Check if bucket already exists !
 
@@ -305,6 +370,7 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 	}
 	return d, nil
 }
+*/
 
 func ByteSliceInArray(a [][]byte, s []byte) bool {
 	for _, slice := range a {
@@ -414,10 +480,7 @@ Loop:
 		}
 		_ = layerPager
 		d := &Dump{
-			Bucket: model.Bucket{
-				Uid:        model.BucketUid((rhUid[:])),
-				LayerRefIt: layerPager.All(),
-			},
+			Bucket: nil,
 		}
 		dumps = append(dumps, d)
 	}

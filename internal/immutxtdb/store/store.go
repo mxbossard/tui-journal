@@ -9,6 +9,16 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
 )
 
+type (
+	BucketUid = bucket.BucketUid
+)
+
+var (
+	ErrNotExist           = bucket.ErrNotExist
+	ErrVersionMissmatch   = bucket.ErrVersionMissmatch
+	ErrInconsistentLayers = bucket.ErrInconsistentLayers
+)
+
 // Store managing "2 phases indexing"
 // 1 ephemeral store
 // 1 rested store
@@ -45,6 +55,12 @@ func NewTwoPhasesStore(ephemeralDir, restedDir, partition, salt string) (*TwoPha
 
 func (s TwoPhasesStore) NewBucket(name string, labels bucket.Labels) *bucket.Bucket {
 	b := s.ephemeral.New(name, labels)
+	s.namesCache[name] = b.Header.Uid
+	return b
+}
+
+func (s TwoPhasesStore) NewBucketByUid(uid BucketUid, name string, labels bucket.Labels) *bucket.Bucket {
+	b := s.ephemeral.CreateOrGet(uid, name, labels)
 	s.namesCache[name] = b.Header.Uid
 	return b
 }

@@ -11,7 +11,7 @@ import (
 )
 
 func TestDiff_TextDiffPatch_Add(t *testing.T) {
-	allWords := ztring.MdSplitedLoremIpsumWords()
+	allWords := ztring.MdLoremIpsumSplitedWords()
 	count := 50
 	//count := len(allWords)
 	firstTxt := strings.Join(allWords[:count/2], " ")
@@ -24,7 +24,7 @@ func TestDiff_TextDiffPatch_Add(t *testing.T) {
 }
 
 func TestDiff_TextDiffPatch_Remove(t *testing.T) {
-	allWords := ztring.MdSplitedLoremIpsumWords()
+	allWords := ztring.MdLoremIpsumSplitedWords()
 	count := 50
 	//count := len(allWords)
 	firstTxt := strings.Join(allWords[:count], " ")
@@ -37,7 +37,7 @@ func TestDiff_TextDiffPatch_Remove(t *testing.T) {
 }
 
 func TestDiff_TextDiffPatch_Then_PatchText(t *testing.T) {
-	allWords := ztring.MdSplitedLoremIpsumWords()
+	allWords := ztring.MdLoremIpsumSplitedWords()
 	count := 50
 	//count := len(allWords)
 	firstTxt := strings.Join(allWords[:count/2], " ")
@@ -53,7 +53,7 @@ func TestDiff_TextDiffPatch_Then_PatchText(t *testing.T) {
 }
 
 func TestDiff_TextZipedPatch(t *testing.T) {
-	allWords := ztring.MdSplitedLoremIpsumWords()
+	allWords := ztring.MdLoremIpsumSplitedWords()
 	count := 50
 	//count := len(allWords)
 	firstTxt := strings.Join(allWords[:count/2], " ")

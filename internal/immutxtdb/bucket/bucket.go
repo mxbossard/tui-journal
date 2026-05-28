@@ -1,8 +1,10 @@
 package bucket
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"iter"
 	"sort"
 	"sync"
@@ -248,4 +250,23 @@ func projectText(b *Bucket, version ...Version) (string, error) {
 		}
 	}
 	return txt, nil
+}
+
+func RandUid() BucketUid {
+	randBytes := make([]byte, 16)
+	_, err := rand.Read(randBytes)
+	if err != nil {
+		panic(err)
+	}
+	return BucketUid(randBytes)
+}
+
+func DeterministicUid(s string) BucketUid {
+	h := fnv.New128a()
+	_, err := h.Write([]byte(s))
+	if err != nil {
+		panic(err)
+	}
+	hBytes := h.Sum(nil)
+	return BucketUid(hBytes)
 }

@@ -2,7 +2,6 @@ package bucket
 
 import (
 	"cmp"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"iter"
@@ -60,8 +59,13 @@ type HeaderRefIndex idx.Index[BucketUid, *HeaderRef]
 type BucketRefIndex idx.Index[BucketUid, *BucketRef]
 
 type Service interface {
-	// Create a new Bucket
+	// Create a new Bucket with a rand uid
 	New(name string, labels Labels) *Bucket
+	// Create a new Bucket with a supplied uid or return it if it already exists
+	CreateOrGet(uid BucketUid, name string, labels Labels) *Bucket
+	// NewWithRandUid(name string, labels Labels) *Bucket
+	// NewWithDeterministicUid(name string, labels Labels) *Bucket
+
 	// Return all Names associated with it's last Bucket Uid
 	Names() (map[string]BucketUid, error)
 	// Get a Bucket by it's Uid
@@ -104,8 +108,18 @@ func (s *bucketService) New(name string, labels Labels) *Bucket {
 	return s.new(name, labels)
 }
 
+func (s *bucketService) CreateOrGet(uid BucketUid, name string, labels Labels) *Bucket {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	return s.new(name, labels)
+}
+
 func (s *bucketService) new(name string, labels Labels) *Bucket {
-	uid := generateRandUid()
+	uid := RandUid()
+	return s.newByUid(uid, name, labels)
+}
+func (s *bucketService) newByUid(uid BucketUid, name string, labels Labels) *Bucket {
 	// FIXME: check if uid already exists
 
 	b := newNamedBucket(s, uid, name)
@@ -974,15 +988,6 @@ func newBucketRefIndex(indexDir, partition, salt string) (BucketRefIndex, error)
 	valSer := serialize.StructSerializer[BucketRef]{}
 	return idx.NewBasicIndex(indexDir, BucketRefIdxQualifier, partition, keySer, valSer,
 		idx.NewRotatingHasher([]byte(salt), BucketRefIdxKeySize), nil, enc, BucketRefIdxPageSize, 0)
-}
-
-func generateRandUid() BucketUid {
-	randBytes := make([]byte, 16)
-	_, err := rand.Read(randBytes)
-	if err != nil {
-		panic(err)
-	}
-	return BucketUid(randBytes)
 }
 
 // return bucketNameIdxDir, headerRefIdxDir, bucketRefIdxDir
