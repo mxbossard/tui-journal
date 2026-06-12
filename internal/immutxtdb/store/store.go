@@ -59,7 +59,7 @@ func (s TwoPhasesStore) NewBucket(name string, labels bucket.Labels) *bucket.Buc
 	return b
 }
 
-func (s TwoPhasesStore) NewBucketByUid(uid BucketUid, name string, labels bucket.Labels) *bucket.Bucket {
+func (s TwoPhasesStore) CreateOrGetBucket(uid BucketUid, name string, labels bucket.Labels) *bucket.Bucket {
 	b := s.ephemeral.CreateOrGet(uid, name, labels)
 	s.namesCache[name] = b.Header.Uid
 	return b

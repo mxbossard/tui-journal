@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -210,31 +209,22 @@ func readLayerDiff(ref *model.LayerRef) (string, error) {
 	return txt, nil
 }
 
-func project(b *model.Bucket) (txt string, err error) {
-	// FIXME: implements diff aggregation
-	for entry := range b.LayerRefIt {
-		if entry.Error() != nil {
-			return "", entry.Error()
-		}
-		txt, err = readLayerDiff(entry.Val())
-		if err != nil && err != io.EOF {
-			return
-		}
-	}
-	return txt, nil
-	// panic("not implemented yet")
+func getStore(dir, salt, device string) (*store.TwoPhasesStore, error) {
+	// Get store
+	eDir := filepath.Join(dir, "ephemeral")
+	rDir := filepath.Join(dir, "rested")
+	s, err := store.NewTwoPhasesStore(eDir, rDir, device, salt)
+	return s, err
 }
 
 // ------------- Dumps ---------------
 
 func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
-	// Get store
-	eDir := filepath.Join(dir, "ephemeral")
-	rDir := filepath.Join(dir, "rested")
-	s, err := store.NewTwoPhasesStore(eDir, rDir, device, salt)
+	s, err := getStore(dir, salt, device)
 	if err != nil {
 		return nil, err
 	}
+
 	now := time.Now()
 
 	// 0- Forge dump name
@@ -284,95 +274,7 @@ func UseCaseDump0_Create(dir, salt, device, txt string) (*Dump, error) {
 	return d, nil
 }
 
-/*
-func UseCaseDump0_Create0(dir, salt, device, txt string) (*Dump, error) {
-	idxService, err := NewIdxService(dir, device, salt)
-	if err != nil {
-		return nil, err
-	}
-	now := time.Now()
-
-	// 0- Forge dump name
-	name := ForgeDumpName(now)
-
-	// FIXME: 1- Check if bucket already exists !
-
-	// 2- Create a bucket
-	_, err = idxService.bucketIdx.Add(dumpState, now, nil, name)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3- Create a bucket-time idx entry
-	// idxService.bucketByTimeIdx.Add(dumpNewState, now, []byte(name))
-
-	// 4- Store the content
-	blocWriter, err := GetBlocWriter(dir, device)
-	if err != nil {
-		return nil, err
-	}
-	data := []byte(txt)
-	n, err := blocWriter.Writer().Write(data)
-	if err != nil {
-		return nil, err
-	}
-	bloc, err := blocWriter.GetLastBloc()
-	if err != nil {
-		return nil, err
-	}
-
-	blocRef := model.BlocRef{
-		BlocsFilepath: blocWriter.Name(),
-		BlocId:        bloc.Uid.Id,
-	}
-
-	pos := bloc.Len() - n
-	rootLayerRef := &model.LayerRef{
-		BlocRef: &blocRef,
-		Pos:     pos,
-		Len:     n,
-	}
-	// fmt.Printf("Written data: %v of len: %d at pos: %d\n", data, n, pos)
-
-	// 5- Create a layer idx entry
-	hUid := model.HashedBucketUid(index.StringToBucketUid(name))
-	e, err := idxService.layerIdx.Add(dumpRootLayerState, now, &hUid, rootLayerRef)
-	if err != nil {
-		return nil, err
-	}
-
-	// rootLayer := model.Layer{
-	// 	Metadata: model.LayerMetadata{
-	// 		Version: 0, // First layer
-	// 		Created: now,
-	// 	},
-	// 	Commited:   false,
-	// 	Snapshoted: true, // First layer snapshoted by definition
-	// }
-
-	// 6- Forge the root layer iterator
-	var layerRefIt iter.Seq[idx.Entry[*model.HashedBucketUid, *model.LayerRef]] = func(yield func(idx.Entry[*model.HashedBucketUid, *model.LayerRef]) bool) {
-		entry := idx.NewEntry(&hUid, rootLayerRef, -1, now, dumpRootLayerState, nil, e.KeyBytes())
-		yield(entry)
-	}
-
-	// 7- Build the entity to return
-	d := &Dump{
-		Bucket: model.Bucket{
-			Uid: model.BucketUid(name),
-			Metadata: model.BucketMetadata{
-				Created: now,
-				Updated: now,
-				Labels:  nil,
-			},
-			LayerRefIt: layerRefIt,
-		},
-	}
-	return d, nil
-}
-*/
-
-func ByteSliceInArray(a [][]byte, s []byte) bool {
+func byteSliceInArray0(a [][]byte, s []byte) bool {
 	for _, slice := range a {
 		if bytes.Equal(s, slice) {
 			return true
@@ -384,109 +286,35 @@ func ByteSliceInArray(a [][]byte, s []byte) bool {
 // Must return a list of dumps able to lazy load their layers.
 // Find count dump root layers
 func UseCaseDump1_ListLast(dir, device, salt string, count int) ([]*Dump, error) {
-	// 1- Browse bucket-time idx to find last dumps ref
-	idxService, err := NewIdxService(dir, device, salt)
+	s, err := getStore(dir, salt, device)
 	if err != nil {
 		return nil, err
 	}
-	// dumpStateFilter := idx.StateFilter(func(s idx.State) (bool, bool) {
-	// 	fmt.Printf("dumpStateFilter s: %v / dumpState: %v\n", s[0:3], dumpState[0:3])
-	// 	return bytes.Equal(s[0:3], dumpState[0:3]), true
-	// })
 
-	// 2- Find last buckets layers in bucketByTimeIdx
-	// 	k := 0
-	// 	var bucketRhUids [][]byte
-	// 	paginer, errChan := idxService.bucketByTimeIdx.FilterAll(idx.BottomToTop, dumpStateFilter)
-	// BucketLoop:
-	// 	for err, page := range paginer.All() {
-	// 		// FIXME: what is this error ?
-	// 		if err != nil {
-	// 			return nil, err
-	// 		}
-	// 		if err := errorz.ChanCollect(errChan); err.GotError() {
-	// 			return nil, err
-	// 		}
-	// 		// FIXME what is this pos ? is it seq ?
-	// 		for pos, entry := range page.All() {
-	// 			_ = pos
-	// 			if k == count {
-	// 				// FIXME: must break only if count DISTINCT bucket uids reached.
-	// 				break BucketLoop
-	// 			}
-	// 			fmt.Printf("ranging over bucketByTimeIdx, hUid: %v\n", entry.Val())
-	// 			// var array [128]byte
-	// 			// copy(array[:], entry.Val())
-	// 			// array := index.ByteSliceToBucketUid()
-	// 			bucketRhUids = append(bucketRhUids, entry.Val())
-	// 			k++
-	// 		}
-	// 	}
+	paginer, err := s.Filter(bucket.YoungerFirst, nil, count, 1)
+	if err != nil {
+		return nil, err
+	}
 
-	// 	fmt.Printf("found last hashed bucket uids: %v\n", bucketRhUids)
-
-	// 3- Find corresponding layers in layerIdx
-	// var snapshotedLayersRhUids [][]byte
-	// layerKeyFilter := idx.KeyFilter(func(k []byte, s idx.State) (bool, bool) {
-	// 	// hashedUid := index.HashedBucketUid(k)
-	// 	fmt.Printf("layerKeyFilter k: %v / state: %v / bucketRhUids: %v\n", k, s, bucketRhUids)
-	// 	for _, hUid := range bucketRhUids {
-	// 		if bytes.Equal(hUid, k) {
-	// 			if ByteSliceInArray(snapshotedLayersRhUids, hUid) {
-	// 				// RhUid already seen go on looping
-	// 				return false, true
-	// 			}
-	// 			if bytes.Equal(s, layerSnapshotState) {
-	// 				// Layer is a snapshot
-	// 				snapshotedLayersRhUids = append(snapshotedLayersRhUids, hUid)
-	// 			}
-	// 			return true, true
-	// 		}
-	// 	}
-	// 	return false, true
-	// })
-
-	k := 0
 	var dumps []*Dump
-	layersByRhUid := make(map[[128]byte][]*model.LayerRef)
-	paginer2, err := idxService.layerIdx.FilterAll(idx.BottomToTop, idx.AndFilter(dumpTypeFilter, layerFormFilter, rootKindFilter))
-	if err != nil {
-		return nil, err
-	}
-Loop:
-	for err, page := range paginer2.Pages() {
-		// FIXME: what is this error ?
+	for err, page := range paginer.Pages() {
 		if err != nil {
 			return nil, err
 		}
-		for pos, entry := range page.All() {
-			_ = pos
-			if k == count {
-				break Loop
+		for _, entry := range page.Entries() {
+			if entry.Error() != nil {
+				return nil, err
 			}
-			fmt.Printf("ranging over layerIdx, layerRef: %v\n", entry.Val())
-			layersByRhUid[*entry.Key()] = append(layersByRhUid[*entry.Key()], entry.Val())
-			k++
+			d := &Dump{
+				Bucket: entry.Val(),
+			}
+			dumps = append(dumps, d)
 		}
-	}
-
-	for rhUid, layerRefs := range layersByRhUid {
-		// FIXME: need to find UID
-		// FIXME: do not have metadata here ? Where are stored metadatas ? Do we need Metadata before projecting the document ?
-		_ = layerRefs
-		layerPager, err := idxService.layerIdx.Paginate((*model.HashedBucketUid)(rhUid[:]), idx.BottomToTop)
-		if err != nil {
-			return nil, err
-		}
-		_ = layerPager
-		d := &Dump{
-			Bucket: nil,
-		}
-		dumps = append(dumps, d)
+		// Parse only first page
+		break
 	}
 
 	return dumps, nil
-	// panic("not implemented yet")
 }
 
 func UseCaseDump2_Get(d Dump) (string, error) {

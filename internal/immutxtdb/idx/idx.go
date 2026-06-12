@@ -156,7 +156,7 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 			return nil, fmt.Errorf("error serializing key: %w", err)
 		}
 	} else if key, ok = any(k).([]byte); !ok {
-		panic("cannot convert key to []byte, need a keySerializer")
+		panic(fmt.Sprintf("cannot convert key of type %T to []byte, need a keySerializer", key))
 	}
 
 	bf := i.selectPartitionBlocFile(normalizedState, k)

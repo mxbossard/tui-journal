@@ -554,7 +554,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 		uidCriteriaMandatory := false
 		var uidsCriteria []BucketUid
 		var uidsFromNamesCriteria []BucketUid
-		if c.BucketNameMatcher() != nil {
+		if c != nil && c.BucketNameMatcher() != nil {
 			uidCriteriaMandatory = true
 			kf, err := bucketNameIdx.KeysFilter(false, c.MatchingNames()...)
 			if err != nil {
@@ -575,7 +575,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 
 		// 2- If UpdateTime criteria resolve corresponding BucketUids
 		var uidsFromUpdateTimeCriteria []BucketUid
-		if c.UpdateTimeMatcher() != nil {
+		if c != nil && c.UpdateTimeMatcher() != nil {
 			uidCriteriaMandatory = true
 			tf := idx.TimeFilter(func(t time.Time) (bool, bool) {
 				matcher := c.UpdateTimeMatcher()
@@ -602,7 +602,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 
 		// 2- If BucketUid criteria Merge with uidsFromNamesCriteria
 		headerRefIdxFilter := idx.NewFilter()
-		if c.MatchingUids() != nil {
+		if c != nil && c.MatchingUids() != nil {
 			uidsCriteria = append(uidsCriteria, c.MatchingUids()...)
 		}
 		if len(uidsFromNamesCriteria) > 0 {
@@ -624,7 +624,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 		}
 
 		// 3- If State criteria add it to headerRefIdxFilter
-		if c.BucketStateMatcher() != nil {
+		if c != nil && c.BucketStateMatcher() != nil {
 			f := idx.StateFilter(func(s idx.State) (bool, bool) {
 				matcher := c.BucketStateMatcher()
 				ok := matcher(State(s))
@@ -634,7 +634,7 @@ func (s *bucketService) Filter(sort Sort, c Criteria, pageSize, preloadPageCount
 		}
 
 		// 4- If CreationTime criteria add it to headerRefIdxFilter
-		if c.CreationTimeMatcher() != nil {
+		if c != nil && c.CreationTimeMatcher() != nil {
 			tf := idx.TimeFilter(func(t time.Time) (bool, bool) {
 				matcher := c.CreationTimeMatcher()
 				ok := matcher(t)

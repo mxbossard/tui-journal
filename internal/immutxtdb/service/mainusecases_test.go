@@ -22,26 +22,32 @@ func TestUseCaseDump0_Create(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, d)
 
-	assert.NotEmpty(t, d.Uid)
-	assert.True(t, d.Metadata.Created.After(now))
-	assert.Equal(t, d.Metadata.Created, d.Metadata.Updated)
-	assert.NotNil(t, d.LayerRefIt)
+	assert.NotEmpty(t, d.Header.Uid)
+	assert.True(t, d.Header.Created.After(now))
+	assert.Equal(t, d.Header.Created, d.Metadata.Updated)
+
+	layerIt, err := d.LayerIt()
+	assert.NoError(t, err)
+	assert.NotNil(t, layerIt)
 	k := 0
-	for l := range d.LayerRefIt {
-		assert.NoError(t, l.Error())
-		assert.NotNil(t, l)
-		k++
-	}
-	assert.Equal(t, 1, k)
-	k = 0
-	for l := range d.LayerRefIt {
-		assert.NoError(t, l.Error())
+	for err, l := range layerIt {
+		assert.NoError(t, err)
 		assert.NotNil(t, l)
 		k++
 	}
 	assert.Equal(t, 1, k)
 
-	txt, err := project(&d.Bucket)
+	k = 0
+	layerIt, err = d.LayerIt()
+	assert.NoError(t, err)
+	for err, l := range layerIt {
+		assert.NoError(t, err)
+		assert.NotNil(t, l)
+		k++
+	}
+	assert.Equal(t, 1, k)
+
+	txt, err := d.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt, txt)
 }
@@ -65,7 +71,7 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, dumps)
 	require.Len(t, dumps, 1)
-	txt1, err := project(&dumps[0].Bucket)
+	txt1, err := dumps[0].Bucket.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt1, txt1)
 
@@ -78,10 +84,10 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, dumps)
 	require.Len(t, dumps, 2)
-	txt2, err := project(&dumps[0].Bucket)
+	txt2, err := dumps[0].Bucket.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt2, txt2)
-	txt1, err = project(&dumps[1].Bucket)
+	txt1, err = dumps[1].Bucket.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt1, txt1)
 
@@ -94,13 +100,13 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, dumps)
 	require.Len(t, dumps, 3)
-	txt3, err := project(&dumps[0].Bucket)
+	txt3, err := dumps[0].Bucket.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt3, txt3)
-	txt2, err = project(&dumps[1].Bucket)
+	txt2, err = dumps[1].Bucket.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt2, txt2)
-	txt1, err = project(&dumps[2].Bucket)
+	txt1, err = dumps[2].Bucket.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt1, txt1)
 
@@ -108,10 +114,10 @@ func TestUseCaseDump1_ListLast(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, dumps)
 	require.Len(t, dumps, 2)
-	txt3, err = project(&dumps[0].Bucket)
+	txt3, err = dumps[0].Bucket.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt3, txt3)
-	txt2, err = project(&dumps[1].Bucket)
+	txt2, err = dumps[1].Bucket.ProjectText()
 	assert.NoError(t, err)
 	assert.Equal(t, expectedTxt2, txt2)
 }
