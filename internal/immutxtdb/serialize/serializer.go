@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"time"
 	"unicode"
 
@@ -18,6 +19,11 @@ var NotAsciiText = errors.New("supplied text is out of ASCII table")
 
 type Serializer[T any] interface {
 	Serialize(T, []byte) (int, error)
+	Deserialize([]byte) (T, error)
+}
+
+type Serializer2[T any] interface {
+	Serialize(T, *[]byte) (int, error)
 	Deserialize([]byte) (T, error)
 }
 
@@ -156,4 +162,31 @@ func (s StructSerializer[T]) Deserialize(i []byte) (o *T, err error) {
 	var l T
 	err = dec.Decode(&l)
 	return &l, err
+}
+
+type BinarySerializer struct {
+	Serializer2[any]
+}
+
+func (s BinarySerializer) Serialize(i any, o *[]byte) (int, error) {
+	buf := make([]byte, 100)
+	n, err := binary.Encode(buf, binary.BigEndian, i)
+	if err != nil {
+		return -1, err
+	}
+	if len(*o) < n {
+		err = fmt.Errorf("supplied byte slice is too small, need %d bytes", n)
+		return -1, err
+	}
+	p := copy(*o, buf[0:n])
+	if p != n {
+		err = fmt.Errorf("bad byte count written %d/%d", p, n)
+		return p, err
+	}
+	return n, err
+}
+
+func (s BinarySerializer) Deserialize(i []byte) (o any, err error) {
+	_, err = binary.Decode(i, binary.BigEndian, o)
+	return
 }

@@ -151,12 +151,18 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 	var key []byte
 	if i.keySerializer != nil {
 		key = make([]byte, i.encoder.KeySize())
-		_, err = i.keySerializer.Serialize(k, key)
+		n, err := i.keySerializer.Serialize(k, key)
 		if err != nil {
 			return nil, fmt.Errorf("error serializing key: %w", err)
 		}
+		key = key[:n]
 	} else if key, ok = any(k).([]byte); !ok {
-		panic(fmt.Sprintf("cannot convert key of type %T to []byte, need a keySerializer", key))
+		bs := serialize.BinarySerializer{}
+		n, err := bs.Serialize(k, &key)
+		if err != nil {
+			panic(fmt.Sprintf("cannot convert key of type %T to []byte, need a keySerializer (err: %w)", key, err))
+		}
+		key = key[:n]
 	}
 
 	bf := i.selectPartitionBlocFile(normalizedState, k)
