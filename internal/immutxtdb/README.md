@@ -40,19 +40,22 @@
       - [x] Test Bucket Commit Then Get Then Update then Get
       - [x] Test Commit Get Update on different partitions (with conflicts)
       - [x] Return an error on bucket.Project() if conflict.
-- [_] Manage & Test Bucket conflict resolution
 - [x] For now use a Symbolic Zip method: "Zip[<DATA>] for test purpose.
-- [_] Check bucket service files contents (notably for multiple imports)
-- [_] Add idx export / import unittests (especially with hashed keys)
-- [_] Rework Bucket service import/export with idx import/export ?
+
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
-- [_] Manage preloading of idx files ?
-- [_] Do we need to optimize "file reading stop" at snapshot layer ? Could provide a func to decide "preloading stop".
 - [_] For now use a Symbolic Encrypt methode: "Encrypt[<DATA>] for test purpose.
 - [_] Encryption of BlocsFiles impl
 - [_] Randomly generated SecretKey ciphered with user passphrase
 - [_] Bucket / Store squashing on service export
+
+- [_] Manage & Test Bucket conflict resolution
+- [_] Check bucket service files contents (notably for multiple imports)
+      => add file sizes check in test ?
+- [_] Add idx export / import unittests (especially with hashed keys)
+- [_] Rework Bucket service import/export with idx import/export ?
+- [_] Manage preloading of idx files ?
+- [_] Do we need to optimize "file reading stop" at snapshot layer ? Could provide a func to decide "preloading stop".
 - [_] Add Store / Service Snapshot() HOW ?
 - [_] Idx Entry Hiding
 - [_] Bucket / Store hiding : like a delete but data are kept

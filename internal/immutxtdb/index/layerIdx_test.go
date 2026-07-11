@@ -92,9 +92,9 @@ func TestLayerIndex_PaginateAll(t *testing.T) {
 	_, err = bIdx.Add(nil, expectedTime, &expectedBucket3, model.NewLayerRef("file4", 40, Dump))
 	assert.NoError(t, err)
 
-	p, errChan := bIdx.PaginateAll(idx.TopToBottom)
+	p, err := bIdx.PaginateAll(idx.TopToBottom)
 	require.NotNil(t, p)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err := p.Next()
 	assert.NoError(t, err)
@@ -125,9 +125,9 @@ func TestLayerIndex_PaginateAll(t *testing.T) {
 	assert.Equal(t, hashedKey3, entries[3].Key()[:])
 	assert.Equal(t, model.NewLayerRef("file4", 40, Dump), entries[3].Val())
 
-	p2, errChan := bIdx.PaginateAll(idx.BottomToTop)
+	p2, err := bIdx.PaginateAll(idx.BottomToTop)
 	require.NotNil(t, p2)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page2, ok, err := p2.Next()
 	assert.NoError(t, err)
@@ -179,9 +179,9 @@ func TestLayerIndex_Paginate(t *testing.T) {
 	_, err = bIdx.Add(nil, expectedTime, &expectedBucket3, model.NewLayerRef("file4", 40, Dump))
 	assert.NoError(t, err)
 
-	p, errChan := bIdx.Paginate(&expectedBucket0, idx.BottomToTop)
+	p, err := bIdx.Paginate(&expectedBucket0, idx.BottomToTop)
 	require.NotNil(t, p)
-	require.NotNil(t, errChan)
+	require.NoError(t, err)
 
 	page, ok, err := p.Next()
 	assert.NoError(t, err)

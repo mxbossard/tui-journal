@@ -149,20 +149,29 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 	var err error
 	var ok bool
 	var key []byte
-	if i.keySerializer != nil {
+	if _, ok = any(k).(Void); ok {
 		key = make([]byte, i.encoder.KeySize())
-		n, err := i.keySerializer.Serialize(k, key)
+	} else if i.keySerializer != nil {
+		key = make([]byte, i.encoder.KeySize())
+		_, err := i.keySerializer.Serialize(k, key)
 		if err != nil {
 			return nil, fmt.Errorf("error serializing key: %w", err)
 		}
-		key = key[:n]
 	} else if key, ok = any(k).([]byte); !ok {
+		key = make([]byte, i.encoder.KeySize())
 		bs := serialize.BinarySerializer{}
-		n, err := bs.Serialize(k, &key)
+		_, err := bs.Serialize(k, &key)
 		if err != nil {
-			panic(fmt.Sprintf("cannot convert key of type %T to []byte, need a keySerializer (err: %w)", key, err))
+			panic(fmt.Errorf("cannot convert key of type %T to []byte, need a keySerializer (err: %w)", key, err))
 		}
-		key = key[:n]
+	}
+
+	if len(key) > i.encoder.KeySize() {
+		err = fmt.Errorf("supplied key: %v overflow key size: %d", k, i.encoder.KeySize())
+		return nil, err
+	} else if len(key) < i.encoder.KeySize() {
+		// FIXME: SHOULD copy key into right size of []byte
+		panic("bad key size")
 	}
 
 	bf := i.selectPartitionBlocFile(normalizedState, k)

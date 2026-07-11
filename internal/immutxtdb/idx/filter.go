@@ -358,7 +358,6 @@ func MatchPlainBytesKeysFilter(m matchKeyFilter) matchKeyFilter {
 	return func(decodedKey []byte, s State) (ok bool, loop bool) {
 		return kf.match(decodedKey, s)
 	}
-	panic("not implemented yet")
 }
 
 // Filter using bytes key in Index.
@@ -375,7 +374,6 @@ func ExactlyPlainBytesKeysFilter(stopAtFirstMatch bool, keys ...[]byte) *initedK
 		},
 	}
 	return &ikf
-	panic("not implemented yet")
 }
 
 func ExactlyHashedBytesKeysFilter(stopAtFirstMatch bool, keys ...[]byte) *keyFilter {
@@ -386,6 +384,5 @@ func ExactlyHashedBytesKeysFilter(stopAtFirstMatch bool, keys ...[]byte) *keyFil
 		hashedKeySupplied: true,
 		bytesKeys:         keys,
 	}
-	panic("not implemented yet")
 	return &kf
 }
