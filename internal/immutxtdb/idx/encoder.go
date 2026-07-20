@@ -15,7 +15,7 @@ var NotAsciiText = errors.New("supplied text is out of ASCII table")
 type KeyEncoder[K comparable] func(key K) ([]byte, error)
 type ValEncoder[V any] func(val V) ([]byte, error)
 
-type IdxInternalEncoder interface {
+type InternalEncoder interface {
 	StateSize() int
 	KeySize() int
 	Encode(seq int, t time.Time, s State) ([]byte, error)

@@ -42,7 +42,9 @@
       - [x] Return an error on bucket.Project() if conflict.
 - [x] For now use a Symbolic Zip method: "Zip[<DATA>] for test purpose.
 
-- [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user)
+- [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user) 
+      - serializer VS encoder ?
+      - 
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
 - [_] For now use a Symbolic Encrypt methode: "Encrypt[<DATA>] for test purpose.
 - [_] Encryption of BlocsFiles impl

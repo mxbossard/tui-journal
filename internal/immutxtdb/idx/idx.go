@@ -63,12 +63,13 @@ type basicIndex[K comparable, V any] struct {
 	*sync.Mutex
 	// FIXME: add a filelock
 
-	name, partition   string
-	keySerializer     serialize.Serializer[K]
-	valSerializer     serialize.Serializer[V]
-	keyHasher         GlidingHasher
-	valHasher         GlidingHasher
-	encoder           IdxEncoder // FIXME: encoder must be attached to each BlocsFile or to each Bloc !
+	name, partition string
+	keySerializer   serialize.Serializer[K] // convert key to []byte & vice versa
+	valSerializer   serialize.Serializer[V] // convert val to []byte & vice versa
+	keyHasher       GlidingHasher
+	valHasher       GlidingHasher
+	// FIXME: encoder must be attached to each BlocsFile or to each Bloc !
+	encoder           IdxEncoder // encode an entry into []byte ready to store & vice versa
 	pageSize          int
 	preloadPageCount  int
 	filepathes        []string
@@ -80,6 +81,21 @@ type basicIndex[K comparable, V any] struct {
 // Create a Basic Index.
 // Name should be a functionnal name
 // Partition should be a technical qualifier (like a device)
+func NewDefaultIndex[K comparable, V any](indexDir, name, partition string,
+	pageSize, preloadPageCount int) (*basicIndex[K, V], error) {
+	// Must supply a config :
+	// - state size
+	// - key size
+	// - val size
+	// - key or val Hasher ?
+	// - key or val Serializer ?
+	// - always same encoder ?
+	enc := NewByteSliceEncoder(0)
+	return NewBasicIndex(indexDir, name, partition, nil, nil,
+		keyH, valH, enc, pageSize, preloadPageCount)
+
+}
+
 func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
 	keySer serialize.Serializer[K], valSer serialize.Serializer[V],
 	keyH, valH GlidingHasher, enc IdxEncoder,
