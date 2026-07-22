@@ -63,66 +63,80 @@ type basicIndex[K comparable, V any] struct {
 	*sync.Mutex
 	// FIXME: add a filelock
 
-	cfg config[K, V]
+	cfg  config[K, V]
+	repo blocsRepo
+
 	// FIXME: encoder must be attached to each BlocsFile or to each Bloc !
-	encoder           IdxEncoder // encode an entry into []byte ready to store & vice versa
-	filepathes        []string
-	partitionIdxFiles []*filez.BlocsFile
-	otherIdxFiles     []*filez.BlocsFile
-	seqs              map[string]int
+	// encoder IdxEncoder // encode an entry into []byte ready to store & vice versa
+	// partitionIdxFiles []*filez.BlocsFile
+	// otherIdxFiles     []*filez.BlocsFile
+
+	seqs map[string]int
 }
 
-// Create a Basic Index.
-// Name should be a functionnal name
-// Partition should be a technical qualifier (like a device)
-func NewDefaultIndex[K comparable, V any](indexDir string, cfg config[K, V]) (*basicIndex[K, V], error) {
+// Create an Index with supplied config.
+func NewBasicIndex[K comparable, V any](indexDir string, cfg config[K, V]) (*basicIndex[K, V], error) {
 	// FIXME: Move all files and encoder management in "repo" struct
 	// FIXME: manage multiple idx files (rotation)
 	// FIXME: add a filelock
-	firstPartitionFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", cfg.name, cfg.partition))
-	dbf1, err := filez.NewBlocsFile(firstPartitionFilepath, 256, 100)
+
+	// firstPartitionFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", cfg.name, cfg.partition))
+	// dbf1, err := filez.NewBlocsFile(firstPartitionFilepath, 256, 100)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("unable to build blocs file: %w", err)
+	// }
+	// enc := NewByteSliceEncoder(0, cfg.stateSize, cfg.keySize, cfg.valSize)
+	blocsRepo, err := DefaultBlocsRepo(indexDir, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("unable to build blocs file: %w", err)
+		return nil, err
 	}
-	enc := NewByteSliceEncoder(0, cfg.stateSize, cfg.keySize, cfg.valSize)
 
 	idx := &basicIndex[K, V]{
-		Mutex:   &sync.Mutex{},
-		cfg:     cfg,
-		encoder: enc,
+		Mutex: &sync.Mutex{},
+		cfg:   cfg,
+		repo:  blocsRepo,
+		// encoder: enc,
 
-		partitionIdxFiles: []*filez.BlocsFile{dbf1},
-		otherIdxFiles:     nil,
-		seqs:              make(map[string]int),
+		// partitionIdxFiles: []*filez.BlocsFile{dbf1},
+		// otherIdxFiles:     nil,
+		// seqs:              make(map[string]int),
 	}
 
 	// FIXME: need to setup the encoder!
 	//e.Setup()
 
-	// TODO: need to load idx.seqs !
-	for _, bf := range idx.partitionIdxFiles {
-		// Decode last line of last bloc to get current seq
-		bloc, err := bf.GetLastNonEmptyBloc()
-		if err == filez.ErrNotExist {
-			// No bloc to read
-			err = nil
-			continue
-		} else if err != nil {
-			return nil, fmt.Errorf("unable to get last bloc: %w", err)
-		}
-		if bloc.Len() > 0 {
-			lastSeq, _, _, _, _, err := enc.DecodeLastWord(bloc.Bytes())
-			if err != nil {
-				return nil, fmt.Errorf("unable to decode last word: %w", err)
-			}
-			idx.seqs[bf.Name()] = lastSeq + 1
-		}
-	}
+	// for _, bf := range idx.partitionIdxFiles {
+	// 	// Decode last line of last bloc to get current seq
+	// 	bloc, err := bf.GetLastNonEmptyBloc()
+	// 	if err == filez.ErrNotExist {
+	// 		// No bloc to read
+	// 		err = nil
+	// 		continue
+	// 	} else if err != nil {
+	// 		return nil, fmt.Errorf("unable to get last bloc: %w", err)
+	// 	}
+	// 	if bloc.Len() > 0 {
+	// 		lastSeq, _, _, _, _, err := enc.DecodeLastWord(bloc.Bytes())
+	// 		if err != nil {
+	// 			return nil, fmt.Errorf("unable to decode last word: %w", err)
+	// 		}
+	// 		idx.seqs[bf.Name()] = lastSeq + 1
+	// 	}
+	// }
 
-	return idx, nil
+	idx.seqs, err = blocsRepo.LoadSeqs()
+	return idx, err
 }
 
-func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
+// Create an Index with idx.DefaultConfig().
+// Name should be a functionnal name
+// Partition should be a technical qualifier (like a device)
+func NewDefaultIndex[K comparable, V any](indexDir, name, partition string) (*basicIndex[K, V], error) {
+	cfg := DefaultConfig[K, V](name, partition)
+	return NewBasicIndex(indexDir, cfg)
+}
+
+func NewBasicIndex0[K comparable, V any](indexDir, name, partition string,
 	keySer serialize.Serializer[K], valSer serialize.Serializer[V],
 	salt []byte, keyH, valH GlidingHasher, enc IdxEncoder,
 	pageSize, preloadPageCount int) (*basicIndex[K, V], error) {
@@ -163,17 +177,23 @@ func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
 		Mutex: &sync.Mutex{},
 		cfg:   cfg,
 
-		encoder:           enc,
-		partitionIdxFiles: []*filez.BlocsFile{dbf1},
-		otherIdxFiles:     nil,
-		seqs:              make(map[string]int),
+		// encoder:           enc,
+		// partitionIdxFiles: []*filez.BlocsFile{dbf1},
+		// otherIdxFiles:     nil,
+		repo: blocsRepo{
+			indexDir:          indexDir,
+			encoder:           enc,
+			partitionIdxFiles: []*filez.BlocsFile{dbf1},
+		},
+
+		seqs: make(map[string]int),
 	}
 
 	// FIXME: need to setup the encoder!
 	//e.Setup()
 
 	// TODO: need to load idx.seqs !
-	for _, bf := range idx.partitionIdxFiles {
+	for _, bf := range idx.repo.partitionIdxFiles {
 		// Decode last line of last bloc to get current seq
 		bloc, err := bf.GetLastNonEmptyBloc()
 		if err == filez.ErrNotExist {
@@ -195,30 +215,30 @@ func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
 	return idx, nil
 }
 
-func (i *basicIndex[K, V]) selectPartitionBlocFile(s State, k K) *filez.BlocsFile {
-	return i.partitionIdxFiles[0]
-}
+// func (i *basicIndex[K, V]) selectPartitionBlocFile(s State, k K) *filez.BlocsFile {
+// 	return i.partitionIdxFiles[0]
+// }
 
 func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], error) {
 	i.Lock()
 	defer i.Unlock()
 
 	truncatedTime := t.Truncate(24 * time.Hour)
-	normalizedState := CatState(i.encoder.StateSize(), s)
+	normalizedState := CatState(i.cfg.stateSize, s)
 
 	var err error
 	var ok bool
 	var key []byte
 	if _, ok = any(k).(Void); ok {
-		key = make([]byte, i.encoder.KeySize())
+		key = make([]byte, i.cfg.keySize)
 	} else if i.cfg.keySerializer != nil {
-		key = make([]byte, i.encoder.KeySize())
+		key = make([]byte, i.cfg.keySize)
 		_, err := i.cfg.keySerializer.Serialize(k, &key)
 		if err != nil {
 			return nil, fmt.Errorf("error serializing key: %w", err)
 		}
 	} else if key, ok = any(k).([]byte); !ok {
-		key = make([]byte, i.encoder.KeySize())
+		key = make([]byte, i.cfg.keySize)
 		bs := serialize.BinarySerializer{}
 		_, err := bs.Serialize(k, &key)
 		if err != nil {
@@ -226,21 +246,22 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 		}
 	}
 
-	if len(key) > i.encoder.KeySize() {
-		err = fmt.Errorf("supplied key: %v overflow key size: %d", k, i.encoder.KeySize())
+	if len(key) > i.cfg.keySize {
+		err = fmt.Errorf("supplied key: %v overflow key size: %d", k, i.cfg.keySize)
 		return nil, err
-	} else if len(key) < i.encoder.KeySize() {
+	} else if len(key) < i.cfg.keySize {
 		// FIXME: SHOULD copy key into right size of []byte
 		panic("bad key size")
 	}
 
-	bf := i.selectPartitionBlocFile(normalizedState, k)
+	// bf := i.selectPartitionBlocFile(normalizedState, k)
+	bf := i.repo.SelectPartitionBlocFile(normalizedState, key)
 	bfName := bf.Name()
 	seq := i.seqs[bfName]
 
 	var val []byte
 	if i.cfg.valSerializer != nil {
-		val = make([]byte, i.encoder.ValSize())
+		val = make([]byte, i.cfg.valSize)
 		_, err = i.cfg.valSerializer.Serialize(v, &val)
 		if err != nil {
 			return nil, fmt.Errorf("error serializing val: %w", err)
@@ -263,7 +284,7 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 		}
 	}
 
-	data, err := i.encoder.Encode(seq, truncatedTime, normalizedState, key, val)
+	data, err := i.repo.encoder.Encode(seq, truncatedTime, normalizedState, key, val)
 	if err != nil {
 		return nil, fmt.Errorf("error encoding data: %w", err)
 	}
@@ -314,120 +335,157 @@ func (i *basicIndex[K, V]) filter(order Order, f Filter) (Paginer[K, V], error) 
 		}
 	}
 
-	idxFiles := append(i.partitionIdxFiles, i.otherIdxFiles...)
 	p := NewPaginer(i.cfg.pageSize, i.cfg.preloadPageCount, func(push func(Entry[K, V]) bool) {
-		// pusher func impl
-
-		// fmt.Printf("filter: loop0 idxFiles: %v\n", idxFiles)
-		for _, bf := range idxFiles {
-			// fmt.Printf("filter: loop1 bf: %s\n", bf.Name())
-			for err, b := range bf.All(filez.BlocOrdering(order)) {
-				// fmt.Printf("filter: loop2 b: %v\n", b.Uid)
-				if err != nil {
-					e := NewErrEntry[K, V](err)
-					if !push(e) {
-						return
-					}
-				}
-				loop := true
-				i.encoder.DecodeAll(order, b.Bytes(), func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
-					// callback func impl for each decoded line
-					if err != nil {
-						// decoding err => we want to push it and keep iterating
-						e := NewErrEntry[K, V](err)
-						if !push(e) {
-							// we want to stop iterating and then stop decoding
-							return false
-						}
-						return true
-					}
-
-					if sf != nil {
-						// If StateFilter does not match ignore the entry
-						ok, iloop := sf(s)
-						if !ok {
-							return true
-						}
-						loop = loop && iloop
-					}
-					if tf != nil {
-						// If TimeFilter does not match ignore the entry
-						ok, iloop := tf(t)
-						if !ok {
-							return true
-						}
-						loop = loop && iloop
-					}
-
-					matchingKeyFilter := false
-					if mkf != nil {
-						// If MatchKeyFilter does not match ignore the entry
-						ok, iloop := mkf(key, s)
-						if !ok {
-							return true
-						}
-						loop = loop && iloop
-						matchingKeyFilter = ok
-					}
-
-					if ekf != nil {
-						// If MatchKeyFilter does not match ignore the entry
-						// fmt.Printf("ekf: isExactly? %d %v\n", seq, key)
-						ok, iloop, err := ekf.isExactly(seq, key)
-						if err != nil {
-							// decoding err => we want to push it and keep iterating
-							e := NewErrEntry[K, V](err)
-							if !push(e) {
-								// we want to stop iterating and then stop decoding
-								return false
-							}
-							return true
-						}
-						if !ok {
-							return true
-						}
-						loop = loop && iloop
-						matchingKeyFilter = matchingKeyFilter || ok
-					}
-
-					if qf != nil {
-						// If SeqFilter does not match ignore the entry
-						ok, iloop := qf(seq, order)
-						if !ok {
-							return true
-						}
-						loop = loop && iloop
-					}
-
-					// FIXME: do not use serializer if K or V is of []byte type.
-					if matchingKeyFilter || kf == nil { //|| !keyFiltering || bytes.Equal(hashedK, key) {
-						// FIXME: if key was hashed => cannot be deserialized ! => return nil ?
-						var k K
-						if i.cfg.keySerializer != nil {
-							k, err = i.cfg.keySerializer.Deserialize(key)
-						}
-						var v V
-						if i.cfg.valSerializer != nil {
-							v, err = i.cfg.valSerializer.Deserialize(val)
-						}
-						e := NewEntry(k, v, seq, t, s, err, key)
-						if !push(e) {
-							return false
-						}
-					}
-					return loop
-
-				})
-				if !loop {
-					// Stop iterating
-					// fmt.Printf("goto END\n")
-					goto End
+		i.repo.Scan(order, func(b []byte, err error) bool {
+			// fmt.Printf("scanner: loop0 idxFile: %s\n", name)
+			if err != nil {
+				e := NewErrEntry[K, V](err)
+				if !push(e) {
+					// Stop scanning
+					return false
 				}
 			}
-		}
-	End:
+
+			loop := filterAllAndPush(i.repo.encoder, order, b, sf, tf, qf, kf, mkf, ekf,
+				i.cfg.keySerializer, i.cfg.valSerializer, push)
+
+			if !loop {
+				// Stop iterating
+				return false
+			}
+			// Continue scanning
+			return true
+		})
 	})
+
+	/*
+		idxFiles := append(i.repo.partitionIdxFiles, i.repo.otherIdxFiles...)
+		p := NewPaginer(i.cfg.pageSize, i.cfg.preloadPageCount, func(push func(Entry[K, V]) bool) {
+			// pusher func impl
+
+			// fmt.Printf("filter: loop0 idxFiles: %v\n", idxFiles)
+
+			for _, bf := range idxFiles {
+				// fmt.Printf("filter: loop1 bf: %s\n", bf.Name())
+				for err, b := range bf.All(filez.BlocOrdering(order)) {
+					// fmt.Printf("filter: loop2 b: %v\n", b.Uid)
+					if err != nil {
+						e := NewErrEntry[K, V](err)
+						if !push(e) {
+							return
+						}
+					}
+
+					loop := filterAllAndPush(i.repo.encoder, order, b.Bytes(), sf, tf, qf, kf, mkf, ekf,
+						i.cfg.keySerializer, i.cfg.valSerializer, push)
+
+					if !loop {
+						// Stop iterating
+						// fmt.Printf("goto END\n")
+						goto End
+					}
+				}
+			}
+		End:
+		})
+	*/
+
 	return p, nil
+}
+
+func filterAllAndPush[K comparable, V any](encoder IdxEncoder, order Order, data []byte,
+	sf stateFilter, tf timeFilter, qf seqFilter, kf KeyFilter, mkf matchKeyFilter,
+	ekf *initedKeyFilter, keySer serialize.Serializer2[K], valSer serialize.Serializer2[V],
+	push func(Entry[K, V]) bool) bool {
+	loop := true
+	encoder.DecodeAll(order, data, func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
+		// callback func impl for each decoded line
+		if err != nil {
+			// decoding err => we want to push it and keep iterating
+			e := NewErrEntry[K, V](err)
+			if !push(e) {
+				// we want to stop iterating and then stop decoding
+				return false
+			}
+			return true
+		}
+
+		if sf != nil {
+			// If StateFilter does not match ignore the entry
+			ok, iloop := sf(s)
+			if !ok {
+				return true
+			}
+			loop = loop && iloop
+		}
+		if tf != nil {
+			// If TimeFilter does not match ignore the entry
+			ok, iloop := tf(t)
+			if !ok {
+				return true
+			}
+			loop = loop && iloop
+		}
+
+		matchingKeyFilter := false
+		if mkf != nil {
+			// If MatchKeyFilter does not match ignore the entry
+			ok, iloop := mkf(key, s)
+			if !ok {
+				return true
+			}
+			loop = loop && iloop
+			matchingKeyFilter = ok
+		}
+
+		if ekf != nil {
+			// If MatchKeyFilter does not match ignore the entry
+			// fmt.Printf("ekf: isExactly? %d %v\n", seq, key)
+			ok, iloop, err := ekf.isExactly(seq, key)
+			if err != nil {
+				// decoding err => we want to push it and keep iterating
+				e := NewErrEntry[K, V](err)
+				if !push(e) {
+					// we want to stop iterating and then stop decoding
+					return false
+				}
+				return true
+			}
+			if !ok {
+				return true
+			}
+			loop = loop && iloop
+			matchingKeyFilter = matchingKeyFilter || ok
+		}
+
+		if qf != nil {
+			// If SeqFilter does not match ignore the entry
+			ok, iloop := qf(seq, order)
+			if !ok {
+				return true
+			}
+			loop = loop && iloop
+		}
+
+		// FIXME: do not use serializer if K or V is of []byte type.
+		if matchingKeyFilter || kf == nil { //|| !keyFiltering || bytes.Equal(hashedK, key) {
+			// FIXME: if key was hashed => cannot be deserialized ! => return nil ?
+			var k K
+			if keySer != nil {
+				k, err = keySer.Deserialize(key)
+			}
+			var v V
+			if valSer != nil {
+				v, err = valSer.Deserialize(val)
+			}
+			e := NewEntry(k, v, seq, t, s, err, key)
+			if !push(e) {
+				return false
+			}
+		}
+		return loop
+	})
+	return loop
 }
 
 func (i *basicIndex[K, V]) Filter(suppliedKey K, order Order, f Filter) (Paginer[K, V], error) {
@@ -496,7 +554,7 @@ func (i *basicIndex[K, V]) KeysFilter(stopAtFirstMatch bool, keys ...K) (*aggFil
 	// Build all bytesKeys from supplied keys
 	var bytesKeys [][]byte
 	for _, key := range keys {
-		bk := make([]byte, i.encoder.KeySize())
+		bk := make([]byte, i.cfg.keySize)
 		_, err := i.cfg.keySerializer.Serialize(key, &bk)
 		if err != nil {
 			return nil, err

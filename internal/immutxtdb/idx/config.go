@@ -81,6 +81,9 @@ func (c *config[K, V]) EnableValHasher(salt []byte) *config[K, V] {
 	return c
 }
 
+// Build Default idx config.
+// Name should be a functionnal name
+// Partition should be a technical qualifier (like a device)
 func DefaultConfig[K comparable, V any](name, partition string) config[K, V] {
 	keySize := DefaultKeySize
 	valSize := DefaultValSize

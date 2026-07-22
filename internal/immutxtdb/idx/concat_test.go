@@ -50,7 +50,7 @@ func testBuildCatIdx(t *testing.T) (string, *BasicIndexAggregate[string, string]
 	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 
-	idxA, err := NewBasicIndex(tmpDir, "foo", partitionA, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
+	idxA, err := NewBasicIndex0(tmpDir, "foo", partitionA, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, idxA)
 	_, err = idxA.Add(expectedState, time1, "k1", expectedMsg1)
@@ -60,7 +60,7 @@ func testBuildCatIdx(t *testing.T) (string, *BasicIndexAggregate[string, string]
 	_, err = idxA.Add(expectedState, time9, "k3", expectedMsg9)
 	assert.NoError(t, err)
 
-	idxB, err := NewBasicIndex(tmpDir, "foo", partitionB, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
+	idxB, err := NewBasicIndex0(tmpDir, "foo", partitionB, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, idxB)
 	_, err = idxB.Add(expectedState, time4, "k3", expectedMsg4)
@@ -70,7 +70,7 @@ func testBuildCatIdx(t *testing.T) (string, *BasicIndexAggregate[string, string]
 	_, err = idxB.Add(expectedState, time6, "k1", expectedMsg6)
 	assert.NoError(t, err)
 
-	idxC, err := NewBasicIndex(tmpDir, "foo", partitionC, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
+	idxC, err := NewBasicIndex0(tmpDir, "foo", partitionC, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, idxC)
 	_, err = idxC.Add(expectedState, time7, "k1", expectedMsg7)
@@ -80,7 +80,7 @@ func testBuildCatIdx(t *testing.T) (string, *BasicIndexAggregate[string, string]
 	_, err = idxC.Add(expectedState, time3, "k3", expectedMsg3)
 	assert.NoError(t, err)
 
-	idxD, err := NewBasicIndex(tmpDir, "foo", partitionD, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
+	idxD, err := NewBasicIndex0(tmpDir, "foo", partitionD, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, idxD)
 

@@ -27,7 +27,7 @@ func NewDocumentIndex(indexDir, device string) (DocIndex, error) {
 	keySer := serialize.ByteArray128Serializer{}
 	valSer := gobSerializer[model.BucketRef]{}
 	enc := NewDocumentRefEncoder(0, docIdxStateSize, docIdxKeySize, docIdxDataSize)
-	return idx.NewBasicIndex(indexDir, docIdxQualifier, device, keySer, valSer, nil, nil, nil, enc, docIdxPageSize, 0)
+	return idx.NewBasicIndex0(indexDir, docIdxQualifier, device, keySer, valSer, nil, nil, nil, enc, docIdxPageSize, 0)
 }
 
 func NewDocumentRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder {

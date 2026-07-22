@@ -968,7 +968,7 @@ func newBucketNameIndex(indexDir, partition string) (BucketNameIndex, error) {
 	enc := idx.NewAsciiEncoder(0, BucketNameIdxStateSize, BucketNameIdxKeySize, BucketNameIdxDataSize)
 	keySer := serialize.AsciiSerializer{}
 	valSer := BucketUidSerializer{}
-	return idx.NewBasicIndex(indexDir, BucketNameIdxQualifier, partition, keySer, valSer,
+	return idx.NewBasicIndex0(indexDir, BucketNameIdxQualifier, partition, keySer, valSer,
 		nil, nil, nil, enc, BucketNameIdxPageSize, 0)
 }
 
@@ -977,7 +977,7 @@ func newHeaderRefIndex(indexDir, partition, salt string) (HeaderRefIndex, error)
 	enc := idx.NewAsciiEncoder(0, HeaderRefIdxStateSize, HeaderRefIdxKeySize, HeaderRefIdxDataSize)
 	keySer := BucketUidSerializer{}
 	valSer := serialize.StructSerializer[HeaderRef]{}
-	return idx.NewBasicIndex(indexDir, HeaderRefIdxQualifier, partition, keySer, valSer,
+	return idx.NewBasicIndex0(indexDir, HeaderRefIdxQualifier, partition, keySer, valSer,
 		[]byte(salt), idx.NewRotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize, 0)
 }
 
@@ -986,7 +986,7 @@ func newBucketRefIndex(indexDir, partition, salt string) (BucketRefIndex, error)
 	enc := idx.NewAsciiEncoder(0, BucketRefIdxStateSize, BucketRefIdxKeySize, BucketRefIdxDataSize)
 	keySer := BucketUidSerializer{}
 	valSer := serialize.StructSerializer[BucketRef]{}
-	return idx.NewBasicIndex(indexDir, BucketRefIdxQualifier, partition, keySer, valSer,
+	return idx.NewBasicIndex0(indexDir, BucketRefIdxQualifier, partition, keySer, valSer,
 		[]byte(salt), idx.NewRotatingHasher([]byte(salt), BucketRefIdxKeySize), nil, enc, BucketRefIdxPageSize, 0)
 }
 
