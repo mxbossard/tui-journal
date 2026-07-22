@@ -24,7 +24,7 @@ type BucketIndex idx.Index[idx.Void, string]
 func NewBucketIndex(indexDir, device string) (BucketIndex, error) {
 	enc := idx.NewAsciiEncoder(0, BucketIdxStateSize, bucketIdxKeySize, bucketIdxDataSize)
 	valSer := serialize.AsciiSerializer{}
-	return idx.NewBasicIndex[idx.Void](indexDir, bucketIdxQualifier, device, nil, valSer, nil, nil, enc, bucketIdxPageSize, 0)
+	return idx.NewBasicIndex[idx.Void](indexDir, bucketIdxQualifier, device, nil, valSer, nil, nil, nil, enc, bucketIdxPageSize, 0)
 }
 
 type BucketIndex0 struct {

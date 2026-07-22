@@ -63,15 +63,9 @@ type basicIndex[K comparable, V any] struct {
 	*sync.Mutex
 	// FIXME: add a filelock
 
-	name, partition string
-	keySerializer   serialize.Serializer[K] // convert key to []byte & vice versa
-	valSerializer   serialize.Serializer[V] // convert val to []byte & vice versa
-	keyHasher       GlidingHasher
-	valHasher       GlidingHasher
+	cfg config[K, V]
 	// FIXME: encoder must be attached to each BlocsFile or to each Bloc !
 	encoder           IdxEncoder // encode an entry into []byte ready to store & vice versa
-	pageSize          int
-	preloadPageCount  int
 	filepathes        []string
 	partitionIdxFiles []*filez.BlocsFile
 	otherIdxFiles     []*filez.BlocsFile
@@ -81,24 +75,56 @@ type basicIndex[K comparable, V any] struct {
 // Create a Basic Index.
 // Name should be a functionnal name
 // Partition should be a technical qualifier (like a device)
-func NewDefaultIndex[K comparable, V any](indexDir, name, partition string,
-	pageSize, preloadPageCount int) (*basicIndex[K, V], error) {
-	// Must supply a config :
-	// - state size
-	// - key size
-	// - val size
-	// - key or val Hasher ?
-	// - key or val Serializer ?
-	// - always same encoder ?
-	enc := NewByteSliceEncoder(0)
-	return NewBasicIndex(indexDir, name, partition, nil, nil,
-		keyH, valH, enc, pageSize, preloadPageCount)
+func NewDefaultIndex[K comparable, V any](indexDir string, cfg config[K, V]) (*basicIndex[K, V], error) {
+	// FIXME: Move all files and encoder management in "repo" struct
+	// FIXME: manage multiple idx files (rotation)
+	// FIXME: add a filelock
+	firstPartitionFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", cfg.name, cfg.partition))
+	dbf1, err := filez.NewBlocsFile(firstPartitionFilepath, 256, 100)
+	if err != nil {
+		return nil, fmt.Errorf("unable to build blocs file: %w", err)
+	}
+	enc := NewByteSliceEncoder(0, cfg.stateSize, cfg.keySize, cfg.valSize)
 
+	idx := &basicIndex[K, V]{
+		Mutex:   &sync.Mutex{},
+		cfg:     cfg,
+		encoder: enc,
+
+		partitionIdxFiles: []*filez.BlocsFile{dbf1},
+		otherIdxFiles:     nil,
+		seqs:              make(map[string]int),
+	}
+
+	// FIXME: need to setup the encoder!
+	//e.Setup()
+
+	// TODO: need to load idx.seqs !
+	for _, bf := range idx.partitionIdxFiles {
+		// Decode last line of last bloc to get current seq
+		bloc, err := bf.GetLastNonEmptyBloc()
+		if err == filez.ErrNotExist {
+			// No bloc to read
+			err = nil
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("unable to get last bloc: %w", err)
+		}
+		if bloc.Len() > 0 {
+			lastSeq, _, _, _, _, err := enc.DecodeLastWord(bloc.Bytes())
+			if err != nil {
+				return nil, fmt.Errorf("unable to decode last word: %w", err)
+			}
+			idx.seqs[bf.Name()] = lastSeq + 1
+		}
+	}
+
+	return idx, nil
 }
 
 func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
 	keySer serialize.Serializer[K], valSer serialize.Serializer[V],
-	keyH, valH GlidingHasher, enc IdxEncoder,
+	salt []byte, keyH, valH GlidingHasher, enc IdxEncoder,
 	pageSize, preloadPageCount int) (*basicIndex[K, V], error) {
 	// Init bucketIndex
 	// FIXME: manage multiple idx files (rotation)
@@ -109,17 +135,35 @@ func NewBasicIndex[K comparable, V any](indexDir, name, partition string,
 	if err != nil {
 		return nil, fmt.Errorf("unable to build blocs file: %w", err)
 	}
+
+	cfg := DefaultConfig[K, V](name, partition)
+	cfg.SetStateSize(enc.StateSize())
+	cfg.SetKeySize(enc.KeySize())
+	cfg.SetValSize(enc.ValSize())
+	cfg.SetPageSize(pageSize)
+	cfg.SetPreloadPageCount(preloadPageCount)
+	if keySer != nil {
+		cfg.SetKeySerializer0(keySer)
+	} else {
+		cfg.SetKeySerializer(nil)
+	}
+	if valSer != nil {
+		cfg.SetValSerializer0(valSer)
+	} else {
+		cfg.SetValSerializer(nil)
+	}
+	if keyH != nil {
+		cfg.EnableKeyHasher(salt)
+	}
+	if valH != nil {
+		cfg.EnableValHasher(salt)
+	}
+
 	idx := &basicIndex[K, V]{
-		Mutex:             &sync.Mutex{},
-		name:              name,
-		partition:         partition,
-		keySerializer:     keySer,
-		valSerializer:     valSer,
-		keyHasher:         keyH,
-		valHasher:         valH,
+		Mutex: &sync.Mutex{},
+		cfg:   cfg,
+
 		encoder:           enc,
-		pageSize:          pageSize,
-		preloadPageCount:  preloadPageCount,
 		partitionIdxFiles: []*filez.BlocsFile{dbf1},
 		otherIdxFiles:     nil,
 		seqs:              make(map[string]int),
@@ -167,9 +211,9 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 	var key []byte
 	if _, ok = any(k).(Void); ok {
 		key = make([]byte, i.encoder.KeySize())
-	} else if i.keySerializer != nil {
+	} else if i.cfg.keySerializer != nil {
 		key = make([]byte, i.encoder.KeySize())
-		_, err := i.keySerializer.Serialize(k, key)
+		_, err := i.cfg.keySerializer.Serialize(k, &key)
 		if err != nil {
 			return nil, fmt.Errorf("error serializing key: %w", err)
 		}
@@ -195,9 +239,9 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 	seq := i.seqs[bfName]
 
 	var val []byte
-	if i.valSerializer != nil {
+	if i.cfg.valSerializer != nil {
 		val = make([]byte, i.encoder.ValSize())
-		_, err = i.valSerializer.Serialize(v, val)
+		_, err = i.cfg.valSerializer.Serialize(v, &val)
 		if err != nil {
 			return nil, fmt.Errorf("error serializing val: %w", err)
 		}
@@ -206,14 +250,14 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 	}
 
 	// Rotating Hash
-	if i.keyHasher != nil {
-		key, err = i.keyHasher(seq, key)
+	if i.cfg.keyHasher != nil {
+		key, err = i.cfg.keyHasher(seq, key)
 		if err != nil {
 			return nil, fmt.Errorf("error hashing key: %w", err)
 		}
 	}
-	if i.valHasher != nil {
-		val, err = i.valHasher(seq, val)
+	if i.cfg.valHasher != nil {
+		val, err = i.cfg.valHasher(seq, val)
 		if err != nil {
 			return nil, fmt.Errorf("error hashing val: %w", err)
 		}
@@ -265,13 +309,13 @@ func (i *basicIndex[K, V]) filter(order Order, f Filter) (Paginer[K, V], error) 
 			mkf = kf.MatchKeyFilter()
 			ekf = kf.ExactKeyFilter()
 			if ekf != nil {
-				ekf.init(i.keyHasher)
+				ekf.init(i.cfg.keyHasher)
 			}
 		}
 	}
 
 	idxFiles := append(i.partitionIdxFiles, i.otherIdxFiles...)
-	p := NewPaginer(i.pageSize, i.preloadPageCount, func(push func(Entry[K, V]) bool) {
+	p := NewPaginer(i.cfg.pageSize, i.cfg.preloadPageCount, func(push func(Entry[K, V]) bool) {
 		// pusher func impl
 
 		// fmt.Printf("filter: loop0 idxFiles: %v\n", idxFiles)
@@ -359,12 +403,12 @@ func (i *basicIndex[K, V]) filter(order Order, f Filter) (Paginer[K, V], error) 
 					if matchingKeyFilter || kf == nil { //|| !keyFiltering || bytes.Equal(hashedK, key) {
 						// FIXME: if key was hashed => cannot be deserialized ! => return nil ?
 						var k K
-						if i.keySerializer != nil {
-							k, err = i.keySerializer.Deserialize(key)
+						if i.cfg.keySerializer != nil {
+							k, err = i.cfg.keySerializer.Deserialize(key)
 						}
 						var v V
-						if i.valSerializer != nil {
-							v, err = i.valSerializer.Deserialize(val)
+						if i.cfg.valSerializer != nil {
+							v, err = i.cfg.valSerializer.Deserialize(val)
 						}
 						e := NewEntry(k, v, seq, t, s, err, key)
 						if !push(e) {
@@ -453,7 +497,7 @@ func (i *basicIndex[K, V]) KeysFilter(stopAtFirstMatch bool, keys ...K) (*aggFil
 	var bytesKeys [][]byte
 	for _, key := range keys {
 		bk := make([]byte, i.encoder.KeySize())
-		_, err := i.keySerializer.Serialize(key, bk)
+		_, err := i.cfg.keySerializer.Serialize(key, &bk)
 		if err != nil {
 			return nil, err
 		}

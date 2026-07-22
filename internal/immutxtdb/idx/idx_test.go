@@ -30,7 +30,7 @@ func TestBasicIndex_Add(t *testing.T) {
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, expectedStateLen, expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize, 0)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
@@ -60,7 +60,7 @@ func TestBasicIndex_LastSeq(t *testing.T) {
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize, 0)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
@@ -103,7 +103,7 @@ func TestBasicIndex_LastSeqReopen(t *testing.T) {
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize, 0)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
@@ -123,7 +123,7 @@ func TestBasicIndex_LastSeqReopen(t *testing.T) {
 	assert.Equal(t, 3, count)
 
 	enc2 := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx2, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc2, expectedPageSize, 0)
+	bIdx2, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc2, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
@@ -143,7 +143,7 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize, 0)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
@@ -213,7 +213,7 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 
 	// Open a first Idx
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, enc, expectedPageSize, 0)
+	bIdx, err := NewBasicIndex(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
@@ -227,7 +227,7 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 
 	// Open a second Idx
 	enc2 := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx2, err := NewBasicIndex(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, enc2, expectedPageSize, 0)
+	bIdx2, err := NewBasicIndex(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, nil, enc2, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
@@ -264,7 +264,7 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize, 0)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
@@ -339,7 +339,7 @@ func TestBasicIndex_HashedPaginate(t *testing.T) {
 	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 	keyRot := NewRotatingHasher(expectedSalt, 16)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, keyRot, nil, enc, expectedPageSize, 0)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, expectedSalt, keyRot, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 	_, err = bIdx.Add(expectedState, expectedTime, "k1", "foo")
@@ -411,7 +411,7 @@ func TestBasicIndex_Filter(t *testing.T) {
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
 	enc := NewAsciiEncoder(0, expectedStateLen, expectedKeySize, 100)
-	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, enc, expectedPageSize, 0)
+	bIdx, err := NewBasicIndex(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 	_, err = bIdx.Add(expectedState1, time2, "k1", "foo")

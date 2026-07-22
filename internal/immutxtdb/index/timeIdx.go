@@ -29,5 +29,5 @@ func NewCreationTimeIndex(indexDir, device, salt string) (DocByTimeIndex, error)
 	valSer := serialize.ByteSliceSerializer{}
 	// enc := NewDocumentRefEncoder(0, timeIdxStateSize, timeIdxKeySize, timeIdxDataSize)
 	enc := idx.NewByteSliceEncoder(0, TimeIdxStateSize, TimeIdxKeySize, TimeIdxDataSize)
-	return idx.NewBasicIndex(indexDir, CreationTimeIdxQualifier, device, keySer, valSer, nil, idx.NewRotatingHasher([]byte(salt), TimeIdxKeySize), enc, TimeIdxPageSize, 0)
+	return idx.NewBasicIndex(indexDir, CreationTimeIdxQualifier, device, keySer, valSer, nil, nil, idx.NewRotatingHasher([]byte(salt), TimeIdxKeySize), enc, TimeIdxPageSize, 0)
 }

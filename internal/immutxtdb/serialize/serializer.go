@@ -17,6 +17,11 @@ var NullChar = []byte{0}
 var NotMatchingEncoder = errors.New("encoder dos not match")
 var NotAsciiText = errors.New("supplied text is out of ASCII table")
 
+type Serializable interface {
+	Serialize() ([]byte, error)
+	Deserialize([]byte) error
+}
+
 type Serializer[T any] interface {
 	Serialize(T, []byte) (int, error)
 	Deserialize([]byte) (T, error)
@@ -189,4 +194,17 @@ func (s BinarySerializer) Serialize(i any, o *[]byte) (int, error) {
 func (s BinarySerializer) Deserialize(i []byte) (o any, err error) {
 	_, err = binary.Decode(i, binary.BigEndian, o)
 	return
+}
+
+type Serializer2Adapter[T any] struct {
+	Serializer2[T]
+	Wrapped Serializer[T]
+}
+
+func (s Serializer2Adapter[T]) Serialize(in T, out *[]byte) (int, error) {
+	return s.Wrapped.Serialize(in, *out)
+}
+
+func (s Serializer2Adapter[T]) Deserialize(in []byte) (T, error) {
+	return s.Wrapped.Deserialize(in)
 }

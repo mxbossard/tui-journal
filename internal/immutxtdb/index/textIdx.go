@@ -26,7 +26,7 @@ func NewTextIndex(indexDir, device string) (TextIndex, error) {
 	keySer := serialize.ByteArray128Serializer{}
 	valSer := gobSerializer[model.TextRef]{}
 	enc := NewTextRefRefEncoder(0, textIdxStateSize, textIdxKeySize, textIdxDataSize)
-	return idx.NewBasicIndex[*[128]byte, *model.TextRef](indexDir, "text", device, keySer, valSer, nil, nil, enc, textIdxPageSize, 0)
+	return idx.NewBasicIndex[*[128]byte, *model.TextRef](indexDir, "text", device, keySer, valSer, nil, nil, nil, enc, textIdxPageSize, 0)
 }
 
 func NewTextRefRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder {
