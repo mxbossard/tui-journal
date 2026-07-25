@@ -3,6 +3,7 @@ package idx
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/mxbossard/utilz/filez"
 )
@@ -22,6 +23,10 @@ func (r blocsRepo) SelectPartitionBlocFile(s State, k []byte) *filez.BlocsFile {
 }
 
 func (r blocsRepo) Scan(ordering Order, scanner func([]byte, error) bool) {
+	// TODO: cache all the bloc file content ?
+	// TODO: call all the index content ?
+	// FIXME : which order of idx files to iterate ?
+
 	idxFiles := append(r.partitionIdxFiles, r.otherIdxFiles...)
 	var loop bool
 	for _, bf := range idxFiles {
@@ -35,6 +40,23 @@ func (r blocsRepo) Scan(ordering Order, scanner func([]byte, error) bool) {
 			}
 		}
 	}
+}
+
+func (r blocsRepo) ScanDecodeAll(ordering Order, callback func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool) {
+	loop := true
+	r.Scan(ordering, func(b []byte, err error) bool {
+		// Pass err to scanner
+		if err != nil {
+			loop = callback(-1, time.Time{}, nil, nil, nil, err)
+		} else {
+			wrapped := func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
+				loop = callback(seq, t, s, key, val, err)
+				return loop
+			}
+			r.encoder.DecodeAll(ordering, b, wrapped)
+		}
+		return loop
+	})
 }
 
 func (r blocsRepo) LoadSeqs() (map[string]int, error) {

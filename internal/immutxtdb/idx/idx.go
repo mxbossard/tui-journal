@@ -215,10 +215,6 @@ func NewBasicIndex0[K comparable, V any](indexDir, name, partition string,
 	return idx, nil
 }
 
-// func (i *basicIndex[K, V]) selectPartitionBlocFile(s State, k K) *filez.BlocsFile {
-// 	return i.partitionIdxFiles[0]
-// }
-
 func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], error) {
 	i.Lock()
 	defer i.Unlock()
@@ -299,7 +295,7 @@ func (i *basicIndex[K, V]) Add(s State, t time.Time, k K, v V) (Entry[K, V], err
 	return NewEntry(k, v, seq, truncatedTime, normalizedState, nil, key), nil
 }
 
-func (i *basicIndex[K, V]) LastSeq() (int, error) {
+func (i basicIndex[K, V]) LastSeq() (int, error) {
 	// Should be performent and not read all the index to count lines.
 	i.Lock()
 	defer i.Unlock()
@@ -310,10 +306,16 @@ func (i *basicIndex[K, V]) LastSeq() (int, error) {
 	return count, nil
 }
 
-func (i *basicIndex[K, V]) filter(order Order, f Filter) (Paginer[K, V], error) {
-	// TODO: cache all the bloc file content ?
-	// TODO: call all the index content ?
-	// FIXME : which order of idx files to iterate ?
+func (i basicIndex[K, V]) filter(order Order, f Filter) (Paginer[K, V], error) {
+	p := NewPaginer(i.cfg.pageSize, i.cfg.preloadPageCount, func(push func(Entry[K, V]) bool) {
+		callback := i.filteringDecoderCallback(order, f, push)
+		i.repo.ScanDecodeAll(order, callback)
+	})
+
+	return p, nil
+}
+
+func (i basicIndex[K, V]) filteringDecoderCallback(order Order, f Filter, push func(Entry[K, V]) bool) func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
 
 	var sf stateFilter
 	var tf timeFilter
@@ -335,70 +337,8 @@ func (i *basicIndex[K, V]) filter(order Order, f Filter) (Paginer[K, V], error) 
 		}
 	}
 
-	p := NewPaginer(i.cfg.pageSize, i.cfg.preloadPageCount, func(push func(Entry[K, V]) bool) {
-		i.repo.Scan(order, func(b []byte, err error) bool {
-			// fmt.Printf("scanner: loop0 idxFile: %s\n", name)
-			if err != nil {
-				e := NewErrEntry[K, V](err)
-				if !push(e) {
-					// Stop scanning
-					return false
-				}
-			}
-
-			loop := filterAllAndPush(i.repo.encoder, order, b, sf, tf, qf, kf, mkf, ekf,
-				i.cfg.keySerializer, i.cfg.valSerializer, push)
-
-			if !loop {
-				// Stop iterating
-				return false
-			}
-			// Continue scanning
-			return true
-		})
-	})
-
-	/*
-		idxFiles := append(i.repo.partitionIdxFiles, i.repo.otherIdxFiles...)
-		p := NewPaginer(i.cfg.pageSize, i.cfg.preloadPageCount, func(push func(Entry[K, V]) bool) {
-			// pusher func impl
-
-			// fmt.Printf("filter: loop0 idxFiles: %v\n", idxFiles)
-
-			for _, bf := range idxFiles {
-				// fmt.Printf("filter: loop1 bf: %s\n", bf.Name())
-				for err, b := range bf.All(filez.BlocOrdering(order)) {
-					// fmt.Printf("filter: loop2 b: %v\n", b.Uid)
-					if err != nil {
-						e := NewErrEntry[K, V](err)
-						if !push(e) {
-							return
-						}
-					}
-
-					loop := filterAllAndPush(i.repo.encoder, order, b.Bytes(), sf, tf, qf, kf, mkf, ekf,
-						i.cfg.keySerializer, i.cfg.valSerializer, push)
-
-					if !loop {
-						// Stop iterating
-						// fmt.Printf("goto END\n")
-						goto End
-					}
-				}
-			}
-		End:
-		})
-	*/
-
-	return p, nil
-}
-
-func filterAllAndPush[K comparable, V any](encoder IdxEncoder, order Order, data []byte,
-	sf stateFilter, tf timeFilter, qf seqFilter, kf KeyFilter, mkf matchKeyFilter,
-	ekf *initedKeyFilter, keySer serialize.Serializer2[K], valSer serialize.Serializer2[V],
-	push func(Entry[K, V]) bool) bool {
-	loop := true
-	encoder.DecodeAll(order, data, func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
+	return func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool {
+		loop := true
 		// callback func impl for each decoded line
 		if err != nil {
 			// decoding err => we want to push it and keep iterating
@@ -471,12 +411,12 @@ func filterAllAndPush[K comparable, V any](encoder IdxEncoder, order Order, data
 		if matchingKeyFilter || kf == nil { //|| !keyFiltering || bytes.Equal(hashedK, key) {
 			// FIXME: if key was hashed => cannot be deserialized ! => return nil ?
 			var k K
-			if keySer != nil {
-				k, err = keySer.Deserialize(key)
+			if i.cfg.keySerializer != nil {
+				k, err = i.cfg.keySerializer.Deserialize(key)
 			}
 			var v V
-			if valSer != nil {
-				v, err = valSer.Deserialize(val)
+			if i.cfg.valSerializer != nil {
+				v, err = i.cfg.valSerializer.Deserialize(val)
 			}
 			e := NewEntry(k, v, seq, t, s, err, key)
 			if !push(e) {
@@ -484,11 +424,10 @@ func filterAllAndPush[K comparable, V any](encoder IdxEncoder, order Order, data
 			}
 		}
 		return loop
-	})
-	return loop
+	}
 }
 
-func (i *basicIndex[K, V]) Filter(suppliedKey K, order Order, f Filter) (Paginer[K, V], error) {
+func (i basicIndex[K, V]) Filter(suppliedKey K, order Order, f Filter) (Paginer[K, V], error) {
 	kf, err := i.KeysFilter(false, suppliedKey)
 	if err != nil {
 		return nil, err
