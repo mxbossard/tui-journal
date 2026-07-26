@@ -41,7 +41,9 @@
       - [x] Test Commit Get Update on different partitions (with conflicts)
       - [x] Return an error on bucket.Project() if conflict.
 - [x] For now use a Symbolic Zip method: "Zip[<DATA>] for test purpose.
-
+- [_] Rework idx encoders : Externalize a config and a repo
+      - config responsible for idx internal config
+      - repo responsible for storing data in pseudo files & encoding data in thoses files.
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user) 
       - serializer : convert type to []byte
       - encoder: define how []byte data is stored in repo

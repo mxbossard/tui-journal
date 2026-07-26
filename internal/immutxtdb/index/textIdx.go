@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 )
@@ -16,7 +17,7 @@ const (
 )
 
 var (
-	textEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("txt00000")))
+	textEncoderEuid = idxrepo.Euid(binary.BigEndian.Uint64([]byte("txt00000")))
 )
 
 type TextIndex idx.Index[*[128]byte, *model.TextRef]
@@ -29,6 +30,6 @@ func NewTextIndex(indexDir, device string) (TextIndex, error) {
 	return idx.NewBasicIndex0[*[128]byte, *model.TextRef](indexDir, "text", device, keySer, valSer, nil, nil, nil, enc, textIdxPageSize, 0)
 }
 
-func NewTextRefRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder {
-	return idx.NewBasicEncoder(textEncoderEuid, version, stateSize, keySize, valSize)
+func NewTextRefRefEncoder(version int32, stateSize, keySize, valSize int) idxrepo.IdxEncoder {
+	return idxrepo.NewBasicEncoder(textEncoderEuid, version, stateSize, keySize, valSize)
 }

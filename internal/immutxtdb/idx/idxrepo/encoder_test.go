@@ -1,14 +1,26 @@
-package idx
+package idxrepo
 
 import (
+	"encoding/binary"
 	_ "encoding/binary"
 	_ "fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func BuildStringState(size int, s ...string) State {
+	data := make([]byte, size)
+	_, err := binary.Encode(data, binary.BigEndian, []byte(strings.Join(s, "")))
+	if err != nil {
+		panic(err)
+	}
+	// fmt.Printf("built state of size: %d with strings: %v => %v\n", size, s, data)
+	return State(data)
+}
 
 func TestBasicEncoder_Header(t *testing.T) {
 	expectedStateSize := 10

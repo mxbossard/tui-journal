@@ -1,8 +1,10 @@
-package idx
+package hash
 
 import (
 	"crypto/sha512"
 	"encoding/binary"
+
+	"github.com/mxbossard/utilz/bytez"
 )
 
 // type RotatingHasher func(int, []byte) ([]byte, error)
@@ -19,11 +21,11 @@ func NewRotatingHasher(salt []byte, size int) GlidingHasher {
 			return nil, err
 		}
 		if len(b) != size {
-			b = FixedSizeByteSlice(size, b)
+			b = bytez.FixedSizeByteSlice(size, b)
 		}
 		hash.Write(b)
 		hashed := hash.Sum(nil)
-		fixedSizeHash := FixedSizeByteSlice(size, hashed)
+		fixedSizeHash := bytez.FixedSizeByteSlice(size, hashed)
 		return fixedSizeHash, nil
 	}
 }

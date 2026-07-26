@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxcfg"
+	idxhash "github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxhash"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +19,7 @@ func TestBasicIndex_Add(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Add")
 	defer os.RemoveAll(tmpDir)
 
-	expectedPageSize := 10
+	// expectedPageSize := 10
 	expectedState := dummyState
 	expectedStateLen := len(expectedState) + 2
 	now := time.Now()
@@ -29,8 +32,9 @@ func TestBasicIndex_Add(t *testing.T) {
 
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, expectedStateLen, expectedKeySize, 100)
+	enc := idxrepo.NewAsciiEncoder(0, expectedStateLen, expectedKeySize, 100)
 	bIdx, err := NewBasicIndex0(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
+	//bIdx, err := NewBasicIndex(tmpDir, idxcfg.DefaultConfig[string, string]("foo", "bar"))
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
 
@@ -64,7 +68,7 @@ func TestDefaultIndex_Add(t *testing.T) {
 	copy(expectedKey, key)
 	expectedVal := "foo"
 
-	cfg := DefaultConfig[string, string]("foo", "bar")
+	cfg := idxcfg.DefaultConfig[string, string]("foo", "bar")
 	cfg.SetStateSize(expectedStateLen)
 	cfg.SetKeySize(expectedKeySize)
 	bIdx, err := NewBasicIndex(tmpDir, cfg)
@@ -96,7 +100,7 @@ func TestBasicIndex_LastSeq(t *testing.T) {
 	expectedKeySize := 8
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 	bIdx, err := NewBasicIndex0(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
@@ -139,7 +143,7 @@ func TestBasicIndex_LastSeqReopen(t *testing.T) {
 	expectedKeySize := 8
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 	bIdx, err := NewBasicIndex0(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
@@ -159,7 +163,7 @@ func TestBasicIndex_LastSeqReopen(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
-	enc2 := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc2 := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 	bIdx2, err := NewBasicIndex0(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc2, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
@@ -179,7 +183,7 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	expectedKeySize := 16
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 	bIdx, err := NewBasicIndex0(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
@@ -249,7 +253,7 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 	valSer := serialize.AsciiSerializer{}
 
 	// Open a first Idx
-	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 	bIdx, err := NewBasicIndex0(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
@@ -263,7 +267,7 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Open a second Idx
-	enc2 := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc2 := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 	bIdx2, err := NewBasicIndex0(tmpDir, expectedQualifier, expectedDevice, keySer, valSer, nil, nil, nil, enc2, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
@@ -300,7 +304,7 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	expectedKeySize := 16
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 	bIdx, err := NewBasicIndex0(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
@@ -374,8 +378,8 @@ func TestBasicIndex_HashedPaginate(t *testing.T) {
 	expectedSalt := []byte("salted")
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
-	keyRot := NewRotatingHasher(expectedSalt, 16)
+	enc := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	keyRot := idxhash.NewRotatingHasher(expectedSalt, 16)
 	bIdx, err := NewBasicIndex0(tmpDir, "foo", "bar", keySer, valSer, expectedSalt, keyRot, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)
@@ -447,7 +451,7 @@ func TestBasicIndex_Filter(t *testing.T) {
 	expectedKeySize := 16
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, expectedStateLen, expectedKeySize, 100)
+	enc := idxrepo.NewAsciiEncoder(0, expectedStateLen, expectedKeySize, 100)
 	bIdx, err := NewBasicIndex0(tmpDir, "foo", "bar", keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)
 	require.NotNil(t, bIdx)

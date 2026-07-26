@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/mxbossard/utilz/timez"
@@ -48,7 +49,7 @@ func testBuildCatIdx(t *testing.T) (string, *BasicIndexAggregate[string, string]
 
 	keySer := serialize.AsciiSerializer{}
 	valSer := serialize.AsciiSerializer{}
-	enc := NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
+	enc := idxrepo.NewAsciiEncoder(0, len(expectedState), expectedKeySize, 100)
 
 	idxA, err := NewBasicIndex0(tmpDir, "foo", partitionA, keySer, valSer, nil, nil, nil, enc, expectedPageSize, 0)
 	assert.NoError(t, err)

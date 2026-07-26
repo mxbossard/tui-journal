@@ -14,6 +14,8 @@ import (
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/files"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
+	idxhash "github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxhash"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/zip"
 	"github.com/mxbossard/utilz/collectionz"
@@ -965,7 +967,7 @@ func loadLayerData(ref *LayerRef) ([]byte, error) {
 
 // (KEY: string, VAL: BucketUid)
 func newBucketNameIndex(indexDir, partition string) (BucketNameIndex, error) {
-	enc := idx.NewAsciiEncoder(0, BucketNameIdxStateSize, BucketNameIdxKeySize, BucketNameIdxDataSize)
+	enc := idxrepo.NewAsciiEncoder(0, BucketNameIdxStateSize, BucketNameIdxKeySize, BucketNameIdxDataSize)
 	keySer := serialize.AsciiSerializer{}
 	valSer := BucketUidSerializer{}
 	return idx.NewBasicIndex0(indexDir, BucketNameIdxQualifier, partition, keySer, valSer,
@@ -974,20 +976,20 @@ func newBucketNameIndex(indexDir, partition string) (BucketNameIndex, error) {
 
 // (KEY: RH(BucketUid), VAL: HeaderRef)
 func newHeaderRefIndex(indexDir, partition, salt string) (HeaderRefIndex, error) {
-	enc := idx.NewAsciiEncoder(0, HeaderRefIdxStateSize, HeaderRefIdxKeySize, HeaderRefIdxDataSize)
+	enc := idxrepo.NewAsciiEncoder(0, HeaderRefIdxStateSize, HeaderRefIdxKeySize, HeaderRefIdxDataSize)
 	keySer := BucketUidSerializer{}
 	valSer := serialize.StructSerializer[HeaderRef]{}
 	return idx.NewBasicIndex0(indexDir, HeaderRefIdxQualifier, partition, keySer, valSer,
-		[]byte(salt), idx.NewRotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize, 0)
+		[]byte(salt), idxhash.NewRotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize, 0)
 }
 
 // (KEY: H(BucketUid), VAL: BucketRef)
 func newBucketRefIndex(indexDir, partition, salt string) (BucketRefIndex, error) {
-	enc := idx.NewAsciiEncoder(0, BucketRefIdxStateSize, BucketRefIdxKeySize, BucketRefIdxDataSize)
+	enc := idxrepo.NewAsciiEncoder(0, BucketRefIdxStateSize, BucketRefIdxKeySize, BucketRefIdxDataSize)
 	keySer := BucketUidSerializer{}
 	valSer := serialize.StructSerializer[BucketRef]{}
 	return idx.NewBasicIndex0(indexDir, BucketRefIdxQualifier, partition, keySer, valSer,
-		[]byte(salt), idx.NewRotatingHasher([]byte(salt), BucketRefIdxKeySize), nil, enc, BucketRefIdxPageSize, 0)
+		[]byte(salt), idxhash.NewRotatingHasher([]byte(salt), BucketRefIdxKeySize), nil, enc, BucketRefIdxPageSize, 0)
 }
 
 // return bucketNameIdxDir, headerRefIdxDir, bucketRefIdxDir

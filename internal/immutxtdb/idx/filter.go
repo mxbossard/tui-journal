@@ -3,6 +3,8 @@ package idx
 import (
 	"bytes"
 	"time"
+
+	idxhash "github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxhash"
 )
 
 // Return ok=true to select entry, return loop=false to stop iterating.
@@ -303,12 +305,12 @@ func (f keyFilter) match(decodedKey []byte, state State) (bool, bool) {
 type initedKeyFilter struct {
 	keyFilter
 	// encoder KeyEncoder[K]
-	hasher GlidingHasher
+	hasher idxhash.GlidingHasher
 	// ekf     exactKeyFilter
 }
 
 // Init the filter
-func (f *initedKeyFilter) init(hasher GlidingHasher) {
+func (f *initedKeyFilter) init(hasher idxhash.GlidingHasher) {
 	// f.encoder = encoder
 	f.hasher = hasher
 }

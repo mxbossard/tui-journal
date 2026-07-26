@@ -1,4 +1,4 @@
-package idx
+package idxrepo
 
 import (
 	"encoding/binary"

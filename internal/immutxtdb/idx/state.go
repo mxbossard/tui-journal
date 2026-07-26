@@ -4,9 +4,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strings"
+
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 )
 
-type State []byte
+type State = idxrepo.State
 
 var dummyState = BuildStringState(8, "dummy")
 

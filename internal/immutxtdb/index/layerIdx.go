@@ -6,6 +6,8 @@ import (
 	"encoding/gob"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
+	idxhash "github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxhash"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/utilz/inoutz"
@@ -20,7 +22,7 @@ const (
 )
 
 var (
-	layerEncoderEuid = idx.Euid(binary.BigEndian.Uint64([]byte("layer000")))
+	layerEncoderEuid = idxrepo.Euid(binary.BigEndian.Uint64([]byte("layer000")))
 )
 
 func ByteSliceToBucketUid(uid []byte) model.HashedBucketUid {
@@ -61,7 +63,7 @@ func NewLayerIndex(indexDir, device, salt string) (LayerIndex, error) {
 	// keySer := serialize.AsciiSerializer{}
 	valSer := gobSerializer[model.LayerRef]{}
 	enc := NewLayerRefEncoder(0, LayerIdxStateSize, LayerIdxKeySize, LayerIdxDataSize)
-	return idx.NewBasicIndex0(indexDir, LayerIdxQualifier, device, keySer, valSer, []byte(salt), idx.NewRotatingHasher([]byte(salt), LayerIdxKeySize), nil, enc, LayerIdxPageSize, 0)
+	return idx.NewBasicIndex0(indexDir, LayerIdxQualifier, device, keySer, valSer, []byte(salt), idxhash.NewRotatingHasher([]byte(salt), LayerIdxKeySize), nil, enc, LayerIdxPageSize, 0)
 }
 
 type layerRefSerializer struct {
@@ -88,7 +90,7 @@ func (s layerRefSerializer) Deserialize(b []byte) (*model.LayerRef, error) {
 	return &l, err
 }
 
-func NewLayerRefEncoder(version int32, stateSize, keySize, valSize int) idx.IdxEncoder {
+func NewLayerRefEncoder(version int32, stateSize, keySize, valSize int) idxrepo.IdxEncoder {
 	// return idx.NewAbstractEncoder(layerEncoderEuid, version, stateSize, keySize, valSize, layerRefSerializer{})
-	return idx.NewBasicEncoder(layerEncoderEuid, version, stateSize, keySize, valSize)
+	return idxrepo.NewBasicEncoder(layerEncoderEuid, version, stateSize, keySize, valSize)
 }

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/utilz/filez"
 )
@@ -22,7 +23,7 @@ type BucketIndex idx.Index[idx.Void, string]
 
 // (KEY: Void, STATE, VAL: BUCKET_UID)
 func NewBucketIndex(indexDir, device string) (BucketIndex, error) {
-	enc := idx.NewAsciiEncoder(0, BucketIdxStateSize, bucketIdxKeySize, bucketIdxDataSize)
+	enc := idxrepo.NewAsciiEncoder(0, BucketIdxStateSize, bucketIdxKeySize, bucketIdxDataSize)
 	valSer := serialize.AsciiSerializer{}
 	return idx.NewBasicIndex0[idx.Void](indexDir, bucketIdxQualifier, device, nil, valSer, nil, nil, nil, enc, bucketIdxPageSize, 0)
 }
@@ -32,7 +33,7 @@ type BucketIndex0 struct {
 	*sync.Mutex
 	// FIXME: add a filelock
 
-	encoder        idx.IdxEncoder
+	encoder        idxrepo.IdxEncoder
 	keySerializer  serialize.AsciiSerializer
 	filepathes     []string
 	deviceIdxFiles []*filez.BlocsFile

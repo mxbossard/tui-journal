@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx"
+	idxhash "github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxhash"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/model"
 	"github.com/mxbossard/utilz/filez"
 	"github.com/stretchr/testify/assert"
@@ -103,7 +104,7 @@ func TestLayerIndex_PaginateAll(t *testing.T) {
 	assert.Equal(t, 4, page.Len())
 	require.True(t, page.Len() >= 4)
 
-	hasher := idx.NewRotatingHasher([]byte(expectedSalt), LayerIdxKeySize)
+	hasher := idxhash.NewRotatingHasher([]byte(expectedSalt), LayerIdxKeySize)
 
 	entries := page.Entries()
 	// hashedKey0, err := hasher(0, idx.FixedSizeString(LayerIdxKeySize, "foo"))
@@ -189,7 +190,7 @@ func TestLayerIndex_Paginate(t *testing.T) {
 	require.NotNil(t, page)
 	assert.Equal(t, 2, page.Len())
 
-	hasher := idx.NewRotatingHasher([]byte(expectedSalt), LayerIdxKeySize)
+	hasher := idxhash.NewRotatingHasher([]byte(expectedSalt), LayerIdxKeySize)
 
 	entries := page.Entries()
 	require.True(t, page.Len() >= 1)

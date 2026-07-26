@@ -1,14 +1,24 @@
-package idx
+package idxrepo
 
 import (
 	"fmt"
 	"path/filepath"
 	"time"
 
+	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxcfg"
 	"github.com/mxbossard/utilz/filez"
 )
 
-type blocsRepo struct {
+const (
+	TopToBottom Order = "TopToBottom"
+	BottomToTop Order = "BottomToTop"
+)
+
+type Order string
+
+type State []byte
+
+type BlocsRepo struct {
 	indexDir   string
 	salt       []byte
 	passphrase string
@@ -18,11 +28,19 @@ type blocsRepo struct {
 	otherIdxFiles     []*filez.BlocsFile
 }
 
-func (r blocsRepo) SelectPartitionBlocFile(s State, k []byte) *filez.BlocsFile {
+func (r BlocsRepo) Encoder() IdxEncoder {
+	return r.encoder
+}
+
+func (r BlocsRepo) BlocsFiles() []*filez.BlocsFile {
+	return r.partitionIdxFiles
+}
+
+func (r BlocsRepo) SelectPartitionBlocFile(s State, k []byte) *filez.BlocsFile {
 	return r.partitionIdxFiles[0]
 }
 
-func (r blocsRepo) Scan(ordering Order, scanner func([]byte, error) bool) {
+func (r BlocsRepo) Scan(ordering Order, scanner func([]byte, error) bool) {
 	// TODO: cache all the bloc file content ?
 	// TODO: call all the index content ?
 	// FIXME : which order of idx files to iterate ?
@@ -42,7 +60,7 @@ func (r blocsRepo) Scan(ordering Order, scanner func([]byte, error) bool) {
 	}
 }
 
-func (r blocsRepo) ScanDecodeAll(ordering Order, callback func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool) {
+func (r BlocsRepo) ScanDecodeAll(ordering Order, callback func(seq int, t time.Time, s State, key []byte, val []byte, err error) bool) {
 	loop := true
 	r.Scan(ordering, func(b []byte, err error) bool {
 		// Pass err to scanner
@@ -59,7 +77,7 @@ func (r blocsRepo) ScanDecodeAll(ordering Order, callback func(seq int, t time.T
 	})
 }
 
-func (r blocsRepo) LoadSeqs() (map[string]int, error) {
+func (r BlocsRepo) LoadSeqs() (map[string]int, error) {
 	seqs := make(map[string]int)
 	for _, bf := range r.partitionIdxFiles {
 		// Decode last line of last bloc to get current seq
@@ -82,13 +100,13 @@ func (r blocsRepo) LoadSeqs() (map[string]int, error) {
 	return seqs, nil
 }
 
-func DefaultBlocsRepo[K comparable, V any](indexDir string, cfg config[K, V]) (r blocsRepo, err error) {
-	firstPartitionFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", cfg.name, cfg.partition))
+func DefaultBlocsRepo[K comparable, V any](indexDir string, cfg idxcfg.Config[K, V]) (r BlocsRepo, err error) {
+	firstPartitionFilepath := filepath.Join(indexDir, fmt.Sprintf("%s-%s-001.idx", cfg.Name, cfg.Partition))
 	dbf1, err := filez.NewBlocsFile(firstPartitionFilepath, 256, 100)
 	if err != nil {
 		return r, fmt.Errorf("unable to build blocs file: %w", err)
 	}
-	enc := NewByteSliceEncoder(0, cfg.stateSize, cfg.keySize, cfg.valSize)
+	enc := NewByteSliceEncoder(0, cfg.StateSize, cfg.KeySize, cfg.ValSize)
 
 	r.indexDir = indexDir
 	r.encoder = enc
