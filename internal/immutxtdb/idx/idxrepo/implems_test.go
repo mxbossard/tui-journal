@@ -1,4 +1,4 @@
-package idx
+package idxrepo
 
 import (
 	_ "encoding/binary"
@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +17,7 @@ func TestAsciiEncoder(t *testing.T) {
 	expectedWordSize := 12 + expectedStateSize + expectedKeySize + expectedDataSize
 
 	// Encode & Decode with AsciiEncoder
-	e1 := idxrepo.NewAsciiEncoder(0, expectedStateSize, expectedKeySize, expectedDataSize)
+	e1 := NewAsciiEncoder(0, expectedStateSize, expectedKeySize, expectedDataSize)
 	assert.NotNil(t, e1)
 	assert.Equal(t, expectedWordSize, e1.WordSize())
 	header := e1.Header()
@@ -54,7 +53,7 @@ func TestAsciiEncoder(t *testing.T) {
 	assert.Equal(t, expectedText, text)
 
 	// Setup & Decode with a new AsciiEncoder
-	e2 := idxrepo.NewAsciiEncoder(0, 0, 0, 0)
+	e2 := NewAsciiEncoder(0, 0, 0, 0)
 	_, _, _, _, _, err = e2.Decode(buf)
 	assert.Error(t, err) // Not configured error
 
@@ -92,7 +91,7 @@ func TestAsciiEncoder(t *testing.T) {
 	expectedText3 := []byte("baz")
 
 	var bufs []byte
-	e3 := idxrepo.NewAsciiEncoder(0, expectedStateSize, expectedKeySize, expectedDataSize)
+	e3 := NewAsciiEncoder(0, expectedStateSize, expectedKeySize, expectedDataSize)
 	buf, err = e3.Encode(0, expectedTime1, expectedState1, key1, expectedText1)
 	assert.NoError(t, err)
 	bufs = append(bufs, buf...)

@@ -1,4 +1,4 @@
-package hash
+package idxhash
 
 import (
 	"crypto/sha512"

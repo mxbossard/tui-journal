@@ -41,12 +41,16 @@
       - [x] Test Commit Get Update on different partitions (with conflicts)
       - [x] Return an error on bucket.Project() if conflict.
 - [x] For now use a Symbolic Zip method: "Zip[<DATA>] for test purpose.
-- [_] Rework idx encoders : Externalize a config and a repo
+- [x] Rework idx encoders : Externalize a config and a repo
       - config responsible for idx internal config
       - repo responsible for storing data in pseudo files & encoding data in thoses files.
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user) 
       - serializer : convert type to []byte
       - encoder: define how []byte data is stored in repo
+      - [_] Rewrite idx_test with NewBasicIndex() or NewDefaultIndex()
+      - [_] Rewrite concat_test with NewBasicIndex() or NewDefaultIndex()
+      - [_] Rewrite bucket/service.go with NewBasicIndex() or NewDefaultIndex()
+      - [_] What to do with index package ?
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)
 - [_] For now use a Symbolic Encrypt methode: "Encrypt[<DATA>] for test purpose.
 - [_] Encryption of BlocsFiles impl
