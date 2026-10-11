@@ -7,43 +7,11 @@ import (
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
 	"github.com/mxbossard/utilz/filez"
-	"github.com/mxbossard/utilz/timez"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	expectedPageSize = 10
-	partitionA       = "qA"
-	partitionB       = "qB"
-	partitionC       = "qC"
-	partitionD       = "qD"
-	expectedMsg1     = "msg1"
-	expectedMsg2     = "msg2"
-	expectedMsg3     = "msg3"
-	expectedMsg4     = "msg4"
-	expectedMsg5     = "msg5"
-	expectedMsg6     = "msg6"
-	expectedMsg7     = "msg4"
-	expectedMsg8     = "msg5"
-	expectedMsg9     = "msg6"
-	expectedKeySize  = 16
-)
-
-var (
-	expectedState = dummyState
-	time1         = timez.ParseOrPanic(YYYYMMDD, "2026-03-15")
-	time2         = timez.ParseOrPanic(YYYYMMDD, "2026-03-16")
-	time3         = timez.ParseOrPanic(YYYYMMDD, "2026-03-17")
-	time4         = timez.ParseOrPanic(YYYYMMDD, "2026-03-18")
-	time5         = timez.ParseOrPanic(YYYYMMDD, "2026-03-19")
-	time6         = timez.ParseOrPanic(YYYYMMDD, "2026-03-20")
-	time7         = timez.ParseOrPanic(YYYYMMDD, "2026-03-21")
-	time8         = timez.ParseOrPanic(YYYYMMDD, "2026-03-22")
-	time9         = timez.ParseOrPanic(YYYYMMDD, "2026-03-23")
-)
-
-func testBuildCatIdx(t *testing.T) (string, *BasicIndexAggregate[string, string]) {
+func testBuildCatIdxOld(t *testing.T) (string, *BasicIndexAggregate[string, string]) {
 	tmpDir := filez.MkdirTempOrPanic(t.Name())
 	defer os.RemoveAll(tmpDir)
 
@@ -97,7 +65,7 @@ func testBuildCatIdx(t *testing.T) (string, *BasicIndexAggregate[string, string]
 	)
 }
 
-func TestConcat_Add(t *testing.T) {
+func TestConcatOld_Add(t *testing.T) {
 	tmpDir, cat := testBuildCatIdx(t)
 	defer os.RemoveAll(tmpDir)
 
@@ -148,7 +116,7 @@ func TestConcat_Add(t *testing.T) {
 	assert.Equal(t, 1, k)
 }
 
-func TestConcat_Filter(t *testing.T) {
+func TestConcatOld_Filter(t *testing.T) {
 	tmpDir, cat := testBuildCatIdx(t)
 	defer os.RemoveAll(tmpDir)
 
@@ -296,7 +264,7 @@ func TestConcat_Filter(t *testing.T) {
 // 	assert.Equal(t, 3, k)
 // }
 
-func TestConcat_FilterAll(t *testing.T) {
+func TestConcatOld_FilterAll(t *testing.T) {
 	tmpDir, cat := testBuildCatIdx(t)
 	defer os.RemoveAll(tmpDir)
 
@@ -335,7 +303,7 @@ func TestConcat_FilterAll(t *testing.T) {
 	assert.Equal(t, 9, k)
 }
 
-func TestConcat_Paginate(t *testing.T) {
+func TestConcatOld_Paginate(t *testing.T) {
 	tmpDir, cat := testBuildCatIdx(t)
 	defer os.RemoveAll(tmpDir)
 
@@ -389,7 +357,7 @@ func TestConcat_Paginate(t *testing.T) {
 // 	assert.Equal(t, 3, k)
 // }
 
-func TestConcat_PaginateAll(t *testing.T) {
+func TestConcatOld_PaginateAll(t *testing.T) {
 	tmpDir, cat := testBuildCatIdx(t)
 	defer os.RemoveAll(tmpDir)
 
@@ -428,7 +396,7 @@ func TestConcat_PaginateAll(t *testing.T) {
 	assert.Equal(t, 9, k)
 }
 
-func TestConcat_All(t *testing.T) {
+func TestConcatOld_All(t *testing.T) {
 	tmpDir, cat := testBuildCatIdx(t)
 	defer os.RemoveAll(tmpDir)
 
@@ -467,7 +435,7 @@ func TestConcat_All(t *testing.T) {
 	assert.Equal(t, 9, k)
 }
 
-func TestSharedVar(t *testing.T) {
+func TestSharedVarOld(t *testing.T) {
 	a := 0
 	m := make(map[string]int)
 	p := &m

@@ -47,8 +47,8 @@
 - [_] Rework idx Encoders => seq, state & time MUST be encoded by an internal encoder (not responsability of idx user) 
       - serializer : convert type to []byte
       - encoder: define how []byte data is stored in repo
-      - [_] Rewrite idx_test with NewBasicIndex() or NewDefaultIndex()
-      - [_] Rewrite concat_test with NewBasicIndex() or NewDefaultIndex()
+      - [x] Rewrite idx_test with NewBasicIndex() or NewDefaultIndex()
+      - [x] Rewrite concat_test with NewBasicIndex() or NewDefaultIndex()
       - [_] Rewrite bucket/service.go with NewBasicIndex() or NewDefaultIndex()
       - [_] What to do with index package ?
 - [_] Test main usecase : Create a document and index it (bucket, layers, document, text, time)

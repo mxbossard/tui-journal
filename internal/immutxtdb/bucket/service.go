@@ -967,11 +967,12 @@ func loadLayerData(ref *LayerRef) ([]byte, error) {
 
 // (KEY: string, VAL: BucketUid)
 func newBucketNameIndex(indexDir, partition string) (BucketNameIndex, error) {
-	enc := idxrepo.NewAsciiEncoder(0, BucketNameIdxStateSize, BucketNameIdxKeySize, BucketNameIdxDataSize)
-	keySer := serialize.AsciiSerializer{}
-	valSer := BucketUidSerializer{}
-	return idx.NewBasicIndex0(indexDir, BucketNameIdxQualifier, partition, keySer, valSer,
-		nil, nil, nil, enc, BucketNameIdxPageSize, 0)
+	// enc := idxrepo.NewAsciiEncoder(0, BucketNameIdxStateSize, BucketNameIdxKeySize, BucketNameIdxDataSize)
+	// keySer := serialize.AsciiSerializer{}
+	// valSer := BucketUidSerializer{}
+	// return idx.NewBasicIndex0(indexDir, BucketNameIdxQualifier, partition, keySer, valSer,
+	// 	nil, nil, nil, enc, BucketNameIdxPageSize, 0)
+	return idx.NewDefaultIndex[string, BucketUid](indexDir, BucketNameIdxQualifier, partition)
 }
 
 // (KEY: RH(BucketUid), VAL: HeaderRef)
@@ -981,6 +982,9 @@ func newHeaderRefIndex(indexDir, partition, salt string) (HeaderRefIndex, error)
 	valSer := serialize.StructSerializer[HeaderRef]{}
 	return idx.NewBasicIndex0(indexDir, HeaderRefIdxQualifier, partition, keySer, valSer,
 		[]byte(salt), idxhash.NewRotatingHasher([]byte(salt), HeaderRefIdxKeySize), nil, enc, HeaderRefIdxPageSize, 0)
+	// cfg := idxcfg.DefaultConfig[BucketUid, *HeaderRef](HeaderRefIdxQualifier, partition)
+	// cfg.EnableKeyHasher([]byte(salt))
+	// return idx.NewBasicIndex(indexDir, cfg)
 }
 
 // (KEY: H(BucketUid), VAL: BucketRef)

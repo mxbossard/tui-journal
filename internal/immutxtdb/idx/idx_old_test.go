@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxcfg"
 	idxhash "github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxhash"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/idx/idxrepo"
 	"github.com/mxbossard/tui-journal/internal/immutxtdb/serialize"
@@ -15,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBasicIndex_Add(t *testing.T) {
+func TestBasicIndex0_Add(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Add")
 	defer os.RemoveAll(tmpDir)
 
@@ -53,44 +52,7 @@ func TestBasicIndex_Add(t *testing.T) {
 	assert.Equal(t, nil, entry.Error())
 }
 
-func TestDefaultIndex_Add(t *testing.T) {
-	tmpDir := filez.MkdirTempOrPanic("TestDefaultIndex_Add")
-	defer os.RemoveAll(tmpDir)
-
-	// expectedPageSize := 10
-	expectedState := dummyState
-	expectedStateLen := len(expectedState) + 2
-	now := time.Now()
-	expectedTime := now.Truncate(24 * time.Hour)
-	expectedKeySize := 8
-	key := "k1"
-	expectedKey := make([]byte, expectedKeySize)
-	copy(expectedKey, key)
-	expectedVal := "foo"
-
-	cfg := idxcfg.DefaultConfig[string, string]("foo", "bar")
-	cfg.SetStateSize(expectedStateLen)
-	cfg.SetKeySize(expectedKeySize)
-	bIdx, err := NewBasicIndex(tmpDir, cfg)
-	assert.NoError(t, err)
-	require.NotNil(t, bIdx)
-
-	assert.Implements(t, (*Index[string, string])(nil), bIdx)
-
-	entry, err := bIdx.Add(expectedState, now, key, expectedVal)
-
-	assert.NoError(t, err)
-	require.NotNil(t, entry)
-	assert.Equal(t, 0, entry.Seq())
-	assert.Equal(t, expectedTime, entry.Time())
-	assert.Equal(t, CatState(expectedStateLen, expectedState), entry.State())
-	assert.Equal(t, key, entry.Key())
-	assert.Equal(t, expectedKey, entry.KeyBytes())
-	assert.Equal(t, expectedVal, entry.Val())
-	assert.Equal(t, nil, entry.Error())
-}
-
-func TestBasicIndex_LastSeq(t *testing.T) {
+func TestBasicIndex0Old_LastSeq(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_LastSeq")
 	defer os.RemoveAll(tmpDir)
 
@@ -133,7 +95,7 @@ func TestBasicIndex_LastSeq(t *testing.T) {
 	assert.Equal(t, 4, count)
 }
 
-func TestBasicIndex_LastSeqReopen(t *testing.T) {
+func TestBasicIndex0_LastSeqReopen(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_LastSeqReopen")
 	defer os.RemoveAll(tmpDir)
 
@@ -173,7 +135,7 @@ func TestBasicIndex_LastSeqReopen(t *testing.T) {
 	assert.Equal(t, 3, count)
 }
 
-func TestBasicIndex_PaginateAll(t *testing.T) {
+func TestBasicIndex0_PaginateAll(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_PaginateAll")
 	defer os.RemoveAll(tmpDir)
 
@@ -239,7 +201,7 @@ func TestBasicIndex_PaginateAll(t *testing.T) {
 	assert.Equal(t, "foo", entries2[3].Val())
 }
 
-func TestBasicIndex_PaginateAllReopen(t *testing.T) {
+func TestBasicIndex0_PaginateAllReopen(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_PaginateAllReopen")
 	defer os.RemoveAll(tmpDir)
 
@@ -294,7 +256,7 @@ func TestBasicIndex_PaginateAllReopen(t *testing.T) {
 	assert.Equal(t, "pif", entries[3].Val())
 }
 
-func TestBasicIndex_Paginate(t *testing.T) {
+func TestBasicIndex0_Paginate(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Paginate")
 	defer os.RemoveAll(tmpDir)
 
@@ -367,7 +329,7 @@ func TestBasicIndex_Paginate(t *testing.T) {
 	assert.Equal(t, "baz", entries3[0].Val())
 }
 
-func TestBasicIndex_HashedPaginate(t *testing.T) {
+func TestBasicIndex0_HashedPaginate(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Paginate")
 	defer os.RemoveAll(tmpDir)
 
@@ -424,7 +386,7 @@ func TestBasicIndex_HashedPaginate(t *testing.T) {
 	// assert.Equal(t, "pif", entries[1].Val())
 }
 
-func TestBasicIndex_Filter(t *testing.T) {
+func TestBasicIndex0_Filter(t *testing.T) {
 	tmpDir := filez.MkdirTempOrPanic("TestBasicIndex_Filter")
 	defer os.RemoveAll(tmpDir)
 
